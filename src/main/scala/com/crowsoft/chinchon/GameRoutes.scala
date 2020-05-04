@@ -33,6 +33,18 @@ class GameRoutes(gameRegistry: ActorRef[GameRegistry.Command])(implicit val syst
     gameRegistry.ask(DeleteGame(name, _))
   def joinGame(player: Player): Future[ActionPerformed] =
     gameRegistry.ask(JoinGame(player, _))
+  def startGame(gameName: GameName): Future[ActionPerformed] =
+    gameRegistry.ask(StartGame(gameName, _))
+  def startRound(round: RoundInfo): Future[ActionPerformed] =
+    gameRegistry.ask(StartRound(round, _))
+  def takeCard(info: TakeCardInfo): Future[ActionPerformed] =
+    gameRegistry.ask(TakeCard(info, _))
+  def throwCard(info: ThrowCardInfo): Future[ActionPerformed] =
+    gameRegistry.ask(ThrowCard(info, _))
+  def endRound(info: EndRoundInfo): Future[ActionPerformed] =
+    gameRegistry.ask(EndRound(info, _))
+  def discardCards(info: DiscardCardInfo): Future[ActionPerformed] =
+    gameRegistry.ask(DiscardCards(info, _))
 
   //#all-routes
   //#games-get-post
@@ -60,6 +72,66 @@ class GameRoutes(gameRegistry: ActorRef[GameRegistry.Command])(implicit val syst
             entity(as[Player]) { player =>
               onSuccess(joinGame(player)) { performed =>
                 complete((StatusCodes.Created, performed))
+              }
+            }
+          })
+      },
+      path(Segment / "start") { name =>
+        concat(
+          post {
+            entity(as[GameName]) { gameName =>
+              onSuccess(startGame(gameName)) { performed =>
+                complete((StatusCodes.Accepted, performed))
+              }
+            }
+          })
+      },
+      path(Segment / "start_round") { name =>
+        concat(
+          post {
+            entity(as[RoundInfo]) { round =>
+              onSuccess(startRound(round)) { performed =>
+                complete((StatusCodes.Accepted, performed))
+              }
+            }
+          })
+      },
+      path(Segment / "take_card") { name =>
+        concat(
+          post {
+            entity(as[TakeCardInfo]) { info =>
+              onSuccess(takeCard(info)) { performed =>
+                complete((StatusCodes.Accepted, performed))
+              }
+            }
+          })
+      },
+      path(Segment / "throw_card") { name =>
+        concat(
+          post {
+            entity(as[ThrowCardInfo]) { info =>
+              onSuccess(throwCard(info)) { performed =>
+                complete((StatusCodes.Accepted, performed))
+              }
+            }
+          })
+      },
+      path(Segment / "end_round") { name =>
+        concat(
+          post {
+            entity(as[EndRoundInfo]) { info =>
+              onSuccess(endRound(info)) { performed =>
+                complete((StatusCodes.Accepted, performed))
+              }
+            }
+          })
+      },
+      path(Segment / "discard_cards") { name =>
+        concat(
+          post {
+            entity(as[DiscardCardInfo]) { info =>
+              onSuccess(discardCards(info)) { performed =>
+                complete((StatusCodes.Accepted, performed))
               }
             }
           })
