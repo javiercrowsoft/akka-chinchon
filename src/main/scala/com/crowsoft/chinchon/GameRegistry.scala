@@ -30,14 +30,22 @@ object JOKER extends CardSuit(5)
 final case class Card(number: Int, suit: CardSuit)
 final case class NewGame(userName: String)
 final case class Player(userName: String, gameName: String)
-final case class GamePlayer(user: User, cards: List[Card] = List(), game1: List[Card] = List(), game2: List[Card] = List())
+final case class GamePlayer(user: User,
+                            cards: List[Card] = List(),
+                            game1: List[Card] = List(),
+                            game2: List[Card] = List(),
+                            originalGame1: List[Card] = List(),
+                            originalGame2: List[Card] = List(),
+                            hasLost: Boolean = false,
+                            score: Int = 0)
 final case class Play(user: User, cardTaken: Card, cardThrown: Option[Card] = None)
-final case class Score(user: User, points: Int)
+final case class Score(player: GamePlayer, points: Int)
 final case class Round(nextPlayer: GamePlayer,
                        plays: List[Play] = List(),
                        scores: List[Score] = List(),
                        finished: Boolean = false,
-                       discardedCards: Boolean = false)
+                       cardsShowed: Boolean = false,
+                       cardsDiscarded: Boolean = false)
 final case class Game(name: String,
                       players: List[GamePlayer] = List(),
                       onDeck: List[Card] = List(),
@@ -51,45 +59,31 @@ final case class RoundInfo(gameName: String)
 final case class TakeCardInfo(gameName: String, playerName: String, fromDeck: Boolean)
 final case class ThrowCardInfo(gameName: String, playerName: String, card: Card)
 final case class EndRoundInfo(gameName: String, playerName: String, card: Card, game1: List[Card], game2: List[Card])
-final case class DiscardCardList(playerName: String, game1: List[Card], game2: List[Card], discardedCards: List[Card])
-final case class DiscardCardInfo(gameName: String, playerName: String, game1: List[Card], game2: List[Card], discard: List[DiscardCardList])
+final case class ShowCardsInfo(gameName: String, playerName: String, game1: List[Card], game2: List[Card])
+final case class DiscardedCards(playerName: String, game1: List[Card], game2: List[Card], discardedCards: List[Card])
+final case class DiscardCardsInfo(gameName: String, playerName: String, discard: List[DiscardedCards])
 //#game-case-classes
 
 object GameRegistry {
 
   // actor protocol
   sealed trait Command
-
   final case class GetGames(replyTo: ActorRef[Games]) extends Command
-
   final case class CreateGame(newGame: NewGame, replyTo: ActorRef[ActionPerformed]) extends Command
-
   final case class GetGame(name: String, replyTo: ActorRef[GetGameResponse]) extends Command
-
   final case class DeleteGame(name: String, replyTo: ActorRef[ActionPerformed]) extends Command
-
   final case class JoinGame(player: Player, replyTo: ActorRef[ActionPerformed]) extends Command
-
   final case class StartGame(gameName: GameName, replyTo: ActorRef[ActionPerformed]) extends Command
-
   final case class StartRound(round: RoundInfo, replyTo: ActorRef[ActionPerformed]) extends Command
-
   final case class TakeCard(info: TakeCardInfo, replyTo: ActorRef[ActionPerformed]) extends Command
-
   final case class ThrowCard(info: ThrowCardInfo, replyTo: ActorRef[ActionPerformed]) extends Command
-
   final case class EndRound(info: EndRoundInfo, replyTo: ActorRef[ActionPerformed]) extends Command
-
-  final case class DiscardCards(info: DiscardCardInfo, replyTo: ActorRef[ActionPerformed]) extends Command
-
+  final case class ShowCards(info: ShowCardsInfo, replyTo: ActorRef[ActionPerformed]) extends Command
+  final case class DiscardCards(info: DiscardCardsInfo, replyTo: ActorRef[ActionPerformed]) extends Command
   final case class GetGameResponse(maybeGame: Option[Game])
-
   final case class ActionPerformed(description: String)
-
   case class User4CreateGameResponse(response: UserRegistry.GetUserResponse, createGame: CreateGame) extends Command
-
   case class User4JoinGameResponse(response: UserRegistry.GetUserResponse, joinGame: JoinGame) extends Command
-
   case class UserRegistryFailure(exception: Throwable) extends Command
 
   def apply(userRegistry: ActorRef[UserRegistry.Command]): Behavior[Command] = Behaviors.setup[Command] { context =>
@@ -208,9 +202,10 @@ object GameRegistry {
                   plays = Play(updatedPlayer.user, card) :: round.plays)
                 val updatedGame = game.copy(rounds = updatedRound :: game.rounds.tail,
                   onDeck = deck,
-                  onTable = table)
-                val updatedGames = (games - game) + updatedGame
-                registry(updatedGames)
+                  onTable = table,
+                  players = updatePlayers(game.players, updatedPlayer)
+                )
+                updateGame(games, game, updatedGame)
               }
             }
         }
@@ -228,7 +223,7 @@ object GameRegistry {
                   val updatedPlayer = player.copy(cards = updatedCards)
                   val updatedRound = round.copy(nextPlayer = updatedPlayer,
                     plays = round.plays.head.copy(cardThrown = Some(info.card)) :: round.plays.tail)
-                  updateGame(games, info.card, game, updatedRound)
+                  updateRoundAndGame(games, info.card, game, updatedRound, updatedPlayer)
                 }
               }
             }
@@ -254,7 +249,26 @@ object GameRegistry {
                       plays = round.plays.head.copy(cardThrown = Some(info.card)) :: round.plays.tail,
                       scores = scores(game),
                       finished = true)
-                    updateGame(games, info.card, game, updatedRound)
+                    updateRoundAndGame(games, info.card, game, updatedRound, updatedPlayer)
+                  }
+                }
+              }
+            }
+        }
+
+      case ShowCards(info, replyTo) =>
+        whenGameExists(games, info.gameName, replyTo) {
+          game =>
+            whenGameIsRunning(game, replyTo) {
+              whenRoundIsWaitingForShowCards(game, info.playerName, replyTo) {
+                whenPlayerHasCards(game, info.playerName, "show", replyTo) { player =>
+                  whenShowDataIsValid(game, player, info, replyTo) {
+                    val updatedPlayer = player.copy(game1 = info.game1,
+                                                    game2 = info.game2,
+                                                    originalGame1 = info.game1,
+                                                    originalGame2 = info.game2)
+                    val updatedGame = game.copy(players = updatePlayers(game.players, updatedPlayer))
+                    updateGame(games, game, updatedGame)
                   }
                 }
               }
@@ -265,10 +279,50 @@ object GameRegistry {
         whenGameExists(games, info.gameName, replyTo) {
           game =>
             whenGameIsRunning(game, replyTo) {
-              whenRoundIsWaitingForDiscard(game, replyTo, info.playerName) {
-                withPlayer(game, info.playerName, replyTo) { player =>
+              whenRoundIsWaitingForDiscard(game, info.playerName, replyTo) {
+                whenPlayerHasCards(game, info.playerName, "discard", replyTo) { player =>
                   whenDiscardDataIsValid(game, player, info, replyTo) {
-                    Behaviors.same
+                    // update players
+                    //
+                    val discardedCards = info.discard.map(_.discardedCards).flatten ++ player.game1 ++ player.game2
+                    val updatedPlayer = player.copy(cards = List())
+                    val playersWithNewGames = game.players.map(p => {
+                      info.discard.find(_.playerName == p.user.name).fold(p) {d =>
+                        p.copy(game1 = d.game1, game2 = d.game2)
+                      }
+                    })
+
+                    val updatedPlayers = updatePlayers(playersWithNewGames, updatedPlayer)
+
+                    // now update round
+                    //
+                    val round = game.rounds.head
+                    val score = player.cards.filterNot(discardedCards.contains).map(p => p.number).sum
+                    val updatedRound = round.copy(
+                      scores = Score(player, score) :: round.scores,
+                      cardsDiscarded = updatedPlayers.forall(_.cards.isEmpty)
+                    )
+
+                    val updatedGame = game.copy(
+                      players = updatedPlayers,
+                      rounds = updatedRound :: game.rounds.tail
+                    )
+
+                    val gameScores = updatedGame.rounds.map(_.scores).flatten
+
+                    val newLosers = if(updatedRound.cardsDiscarded) {
+                      updatedPlayers.map(p => {
+                        val score = gameScores.filter(_.player.user.name == p.user.name).map(_.points).sum
+                        p.copy(hasLost = score > MAX_SCORE, score = score)
+                      })
+                    } else updatedPlayers
+
+                    val finished = newLosers.filterNot(_.hasLost).size < 2
+                    val gameWithLosers = updatedGame.copy(
+                      finished = finished,
+                      players = if(finished) newLosers.sortBy(_.score) else newLosers
+                    )
+                    updateGame(games, game, gameWithLosers)
                   }
                 }
               }
@@ -284,10 +338,24 @@ object GameRegistry {
         registry(games.filterNot(_.name == name))
     }
 
-    def updateGame(games: Set[Game], card: Card, game: Game, updatedRound: Round) = {
-      val updatedGame = game.copy(rounds = updatedRound :: game.rounds.tail, onTable = card :: game.onTable)
+    def updatePlayers(players: List[GamePlayer], updatedPlayer: GamePlayer) = {
+      def updatePlayers(players: List[GamePlayer], newPlayers: List[GamePlayer]): List[GamePlayer] = players match {
+        case Nil => newPlayers.reverse
+        case p :: t => updatePlayers(t, (if(updatedPlayer.user.name == p.user.name) updatedPlayer else p) :: newPlayers)
+      }
+      updatePlayers(players, List())
+    }
+
+    def updateGame(games: Set[Game], game: Game, updatedGame: Game) = {
       val updatedGames = (games - game) + updatedGame
       registry(updatedGames)
+    }
+
+    def updateRoundAndGame(games: Set[Game], card: Card, game: Game, updatedRound: Round, updatedPlayer: GamePlayer) = {
+      val updatedGame = game.copy(rounds = updatedRound :: game.rounds.tail,
+                                  onTable = card :: game.onTable,
+                                  players = updatePlayers(game.players, updatedPlayer))
+      updateGame(games, game, updatedGame)
     }
 
     def ifRoundFinished(gameName: String, round: Round, replyTo: ActorRef[ActionPerformed]
@@ -296,7 +364,7 @@ object GameRegistry {
         replyTo ! ActionPerformed(s"Current round for game ${gameName} is not finished yet.")
         Behaviors.same
       } else {
-        if (!round.discardedCards) {
+        if (!round.cardsDiscarded) {
           replyTo ! ActionPerformed(s"Current round for game ${gameName} is waiting for players to discard cards.")
           Behaviors.same
         } else {
@@ -309,18 +377,34 @@ object GameRegistry {
       replyTo ! ActionPerformed(s"Round in game ${game.name} has started.")
       val (updatedPlayers, cards, onTableCard) = giveCards(game.players)
       val updatedGames = (games - game) + game.copy(
-        rounds = Round(updatedPlayers.head) :: game.rounds, players = updatedPlayers, onDeck = cards, onTable = onTableCard)
+        rounds = Round(nextPlayer(game, updatedPlayers)) :: game.rounds, players = updatedPlayers, onDeck = cards, onTable = onTableCard)
       registry(updatedGames)
     }
 
     registry(Set.empty)
   }
 
+  def nextPlayer(game: Game, players: List[GamePlayer]) = {
+    def next(player: GamePlayer, players: List[GamePlayer]): GamePlayer = players match {
+      case _ :: Nil => players.head
+      case p :: t => if(p.user.name == player.user.name) t.head else next(player, t)
+      case _ => throw new IllegalStateException(s"Unable to find next player. Searching for $player in $game")
+    }
+    game.rounds match {
+      case Nil => players.head
+      case round :: t => next(round.nextPlayer, players)
+    }
+  }
+
   private def scores(game: Game) = {
     List()
   }
 
-  def isValidNumber(card: Card, cards: List[Card]) = !cards.exists(_.number != card.number)
+  def isValidNumber(card: Card, cards: List[Card]) = (
+    !cards.exists(_.number != card.number)
+      && cards.size < 5
+      && cards.size > 2
+    )
 
   def isValidSuit(jokers: Int, cards: List[Card]) = {
     def validateSequence(jokers: Int, cardNumber: Int, cards: List[Card]): Boolean = cards match {
@@ -353,16 +437,16 @@ object GameRegistry {
       || game2.exists(c => !cards.contains(c)))
   }
 
-  private def hasValidGames(cards: List[Card], info: DiscardCardInfo) = {
-    if (info.game1.distinct.size != info.game1.size) {
+  private def hasValidGames(cards: List[Card], game1: List[Card], game2: List[Card]) = {
+    if (game1.distinct.size != game1.size) {
       false
-    } else if (info.game2.distinct.size != info.game2.size) {
+    } else if (game2.distinct.size != game2.size) {
       false
     } else {
-      if (invalidCards(cards, info.game1, info.game2)) {
+      if (invalidCards(cards, game1, game2)) {
         false
       } else {
-        (info.game1.isEmpty || isValidGame(info.game1)) && (info.game2.isEmpty || isValidGame(info.game2))
+        (game1.isEmpty || isValidGame(game1)) && (game2.isEmpty || isValidGame(game2))
       }
     }
   }
@@ -445,14 +529,45 @@ object GameRegistry {
     { player => block(player) }
   }
 
-  private def whenDiscardDataIsValid(game: Game, player: GamePlayer, info: DiscardCardInfo, replyTo: ActorRef[ActionPerformed]
-                                    )(block: => Behavior[Command]): Behavior[Command] = {
+  private def whenShowDataIsValid(game: Game, player: GamePlayer, info: ShowCardsInfo, replyTo: ActorRef[ActionPerformed]
+                                 )(block: => Behavior[Command]): Behavior[Command] = {
     def invalidCards = {
-      val cards = info.discard.map(_.discardedCards).flatten
+      val cards = info.game1 ++ info.game2
       cards.exists(c => ! player.cards.contains(c)) || cards.distinct.size != cards.size // duplicated cards
     }
-    if(invalidCards || ! hasValidGames(player.cards, info) || invalidDiscard(game, info)) {
-      replyTo ! ActionPerformed(s"Discard cards are not valid for user ${player.user.name} in game $game.")
+    if(invalidCards || ! hasValidGames(player.cards, info.game1, info.game2)) {
+      replyTo ! ActionPerformed(s"Showed cards are not valid for user ${player.user.name} in game $game.")
+      Behaviors.same
+    }
+    else block
+  }
+
+  private def invalidDiscard(game: Game, info: DiscardCardsInfo) = {
+    def invalidData(discard: DiscardedCards) = {
+      game.players.find(_.user.name == discard.playerName).fold(false) { player =>
+        // remove discarded cards from game1 and game2 informed by player who is discarding cards
+        ( discard.game1.filterNot(discard.discardedCards.contains) != player.game1     // compare with game 1
+          || discard.game2.filterNot(discard.discardedCards.contains) != player.game1  // compare with game 2
+          || ! hasValidGames(player.cards ++ discard.discardedCards, discard.game1, discard.game2)
+        )
+      }
+    }
+    info.discard.exists(invalidData)
+  }
+
+  private def whenDiscardDataIsValid(game: Game, player: GamePlayer, info: DiscardCardsInfo, replyTo: ActorRef[ActionPerformed]
+                                    )(block: => Behavior[Command]): Behavior[Command] = {
+    def invalidCards = {
+      val cardsInGames = player.originalGame1 ++ player.originalGame2
+      val discardedCards = info.discard.map(_.discardedCards).flatten
+      ( cardsInGames.size + discardedCards.size != 7
+        || discardedCards.exists(c => ! player.cards.contains(c)) // discarded card is not in players hand
+        || discardedCards.distinct.size != discardedCards.size // duplicated cards
+        || discardedCards.exists(cardsInGames.contains) // discarded card is in player game
+      )
+    }
+    if(invalidCards || invalidDiscard(game, info)) {
+      replyTo ! ActionPerformed(s"Discarded cards are not valid for user ${player.user.name} in game $game.")
       Behaviors.same
     }
     else block
@@ -472,7 +587,7 @@ object GameRegistry {
     def giveCards(players : List[GamePlayer],
                   newPlayers : List[GamePlayer],
                   deck: List[Card]): (List[GamePlayer], List[Card], List[Card]) = players match {
-      case Nil => (newPlayers, deck.drop(1), List(deck.head))
+      case Nil => (newPlayers.reverse, deck.drop(1), List(deck.head))
       case p :: tail =>
         val cards = deck.take(7)
         val player = p.copy(cards = cards)
@@ -545,22 +660,42 @@ object GameRegistry {
     }
   }
 
+  private def whenPlayerHasCards(
+                                  game: Game,
+                                  playerName: String,
+                                  action: String,
+                                  replyTo: ActorRef[ActionPerformed]
+                                )(block: GamePlayer => Behavior[Command]): Behavior[Command] = {
+    game.players.find(p => p.user.name == playerName && ! p.cards.isEmpty).fold[Behavior[Command]] {
+        replyTo ! ActionPerformed(s"$playerName doesn't have any cards to $action in game ${game.name}.")
+        Behaviors.same
+      }
+      { block }
+  }
+  private def whenRoundIsWaitingForShowCards(
+                                              game: Game,
+                                              playerName: String,
+                                              replyTo: ActorRef[ActionPerformed]
+                                            )(block: => Behavior[Command]): Behavior[Command] = {
+    val roundFinished = game.rounds.headOption.exists(_.finished)
+    if(! roundFinished) {
+      replyTo ! ActionPerformed(s"In game ${game.name} round is not finished yet. You can't show your cards yet.")
+      Behaviors.same
+    }
+    else block
+  }
+
   private def whenRoundIsWaitingForDiscard(
                                            game: Game,
-                                           replyTo: ActorRef[ActionPerformed],
-                                           playerName: String
+                                           playerName: String,
+                                           replyTo: ActorRef[ActionPerformed]
                                           )(block: => Behavior[Command]): Behavior[Command] = {
     val roundFinished = game.rounds.headOption.exists(_.finished)
     if(! roundFinished) {
       replyTo ! ActionPerformed(s"In game ${game.name} round is not finished yet. You can't discard cards yet.")
       Behaviors.same
-    } else {
-      game.players.find(p => p.user.name == playerName && ! p.cards.isEmpty).fold[Behavior[Command]] {
-        replyTo ! ActionPerformed(s"$playerName doesn't have any cards to discard in game ${game.name}.")
-        Behaviors.same
-      }
-      { _ => block }
     }
+    else block
   }
 
   private def newGameId = Util.OneTimeCode(6)
@@ -569,7 +704,8 @@ object GameRegistry {
 
   private def createDeck(suit: CardSuit) = (1 to 12).map(cardOf(suit))
 
-  val joker = cardOf(JOKER)(0)
+  val joker = cardOf(JOKER)(102)
+  val MAX_SCORE = 102
 
   val deck = (
     createDeck(SPADE) ++ createDeck(CLUB) ++ createDeck(CUP) ++ createDeck(CLUB) ++ List(joker, joker)

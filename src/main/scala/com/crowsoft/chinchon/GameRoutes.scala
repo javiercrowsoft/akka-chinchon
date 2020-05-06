@@ -43,7 +43,7 @@ class GameRoutes(gameRegistry: ActorRef[GameRegistry.Command])(implicit val syst
     gameRegistry.ask(ThrowCard(info, _))
   def endRound(info: EndRoundInfo): Future[ActionPerformed] =
     gameRegistry.ask(EndRound(info, _))
-  def discardCards(info: DiscardCardInfo): Future[ActionPerformed] =
+  def discardCards(info: DiscardCardsInfo): Future[ActionPerformed] =
     gameRegistry.ask(DiscardCards(info, _))
 
   //#all-routes
@@ -129,7 +129,7 @@ class GameRoutes(gameRegistry: ActorRef[GameRegistry.Command])(implicit val syst
       path(Segment / "discard_cards") { name =>
         concat(
           post {
-            entity(as[DiscardCardInfo]) { info =>
+            entity(as[DiscardCardsInfo]) { info =>
               onSuccess(discardCards(info)) { performed =>
                 complete((StatusCodes.Accepted, performed))
               }
