@@ -1,8 +1,8 @@
 package com.crowsoft.chinchon
 
 //#user-registry-actor
-import akka.actor.typed.{ActorRef, Behavior}
 import akka.actor.typed.scaladsl.Behaviors
+import akka.actor.typed.{ActorRef, Behavior}
 
 import scala.collection.immutable
 

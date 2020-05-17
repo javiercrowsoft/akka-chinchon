@@ -1,6 +1,7 @@
 package com.crowsoft.chinchon
 
-import scala.util.Random
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Random, Success}
 
 object Util {
 
@@ -9,4 +10,8 @@ object Util {
       Random.alphanumeric.take(length).mkString("")
     }
   }
+
+  def waitAll[T](futures: Seq[Future[T]])(implicit ex: ExecutionContext) =
+    Future.sequence(futures)
+
 }

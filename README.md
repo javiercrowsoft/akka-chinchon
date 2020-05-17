@@ -24,10 +24,12 @@ curl -XPOST 'localhost:8080/games' -d '{"userName":"John Doe"}' --header 'Conten
 
 ### join a game
 curl -XPOST 'localhost:8080/games/:game_name/players' -d '{"userName":"Jean Foe", "gameName": ":game_name"}' --header 'Content-Type:application/json'
+curl -XPOST 'localhost:8080/games/dFfyId/players' -d '{"userName":"Jean Foe", "gameName": "dFfyId"}' --header 'Content-Type:application/json'
 
 ### list
 curl 'localhost:8080/games' | json_pp
 curl 'localhost:8080/games/:game_name' | json_pp
+curl 'localhost:8080/games/dFfyId' | json_pp
 
 ### delete
 curl -XDELETE 'localhost:8080/games/:game_name'

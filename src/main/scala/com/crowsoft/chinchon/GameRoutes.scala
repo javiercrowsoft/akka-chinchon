@@ -27,7 +27,7 @@ class GameRoutes(gameRegistry: ActorRef[GameRegistry.Command])(implicit val syst
     gameRegistry.ask(GetGames)
   def getGame(name: String): Future[GetGameResponse] =
     gameRegistry.ask(GetGame(name, _))
-  def createGame(newGame: NewGame): Future[ActionPerformed] =
+  def createGame(newGame: NewGame): Future[CreateGameResponse] =
     gameRegistry.ask(CreateGame(newGame, _))
   def deleteGame(name: String): Future[ActionPerformed] =
     gameRegistry.ask(DeleteGame(name, _))
@@ -35,7 +35,7 @@ class GameRoutes(gameRegistry: ActorRef[GameRegistry.Command])(implicit val syst
     gameRegistry.ask(JoinGame(player, _))
   def startGame(gameName: GameName): Future[ActionPerformed] =
     gameRegistry.ask(StartGame(gameName, _))
-  def startRound(round: RoundInfo): Future[ActionPerformed] =
+  def startRound(round: GameName): Future[ActionPerformed] =
     gameRegistry.ask(StartRound(round, _))
   def takeCard(info: TakeCardInfo): Future[ActionPerformed] =
     gameRegistry.ask(TakeCard(info, _))
@@ -89,7 +89,7 @@ class GameRoutes(gameRegistry: ActorRef[GameRegistry.Command])(implicit val syst
       path(Segment / "start_round") { name =>
         concat(
           post {
-            entity(as[RoundInfo]) { round =>
+            entity(as[GameName]) { round =>
               onSuccess(startRound(round)) { performed =>
                 complete((StatusCodes.Accepted, performed))
               }

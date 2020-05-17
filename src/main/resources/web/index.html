@@ -1,0 +1,336 @@
+<html>
+<head>
+    <script src="https://code.jquery.com/jquery-3.4.1.slim.min.js" integrity="sha384-J6qa4849blE2+poT4WnyKhv5vZF5SrPo0iEjwBvKU7imGFAV0wwj1yYfoRSJoZ+n" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script>
+
+    <link rel="stylesheet" href="styles/styles.css">
+    <script type="text/javascript" src="api/game.js"></script>
+</head>
+<body onload="main()">
+
+<div id="main-view">
+
+<div class="d-flex flex-column flex-md-row align-items-center text-white-50 p-3 px-md-4 mb-3 bg-purple border-bottom shadow-sm">
+    <h5 class="my-0 mr-md-auto font-weight-normal text-white">Buggy Games Chinchonazo</h5>
+    <a class="btn btn-success"  href="#" onclick="startApp()">New Game</a>
+</div>
+
+<!-- new game -->
+<section class="jumbotron text-left" id="new-game">
+    <div class="container">
+        <h1>New Game</h1>
+        <p class="lead text-muted">This is the code you must share with your friends so they can join the game you just created</p>
+        <p>
+            <strong>WxdrYejU</strong>
+        </p>
+    </div>
+
+    <div class="container">
+        <div class="card-deck mb-2 text-center">
+            <div class="card mb-6 shadow-sm">
+                <div class="card-header">
+                    <h4>Players</h4>
+                </div>
+                <div class="card-body">
+                    <p>Dorotea Doe</p>
+                    <p>Jeff Steel</p>
+                    <p>Ema Thomson</p>
+                    <p>Eduard Jones</p>
+                    <p>Lilian Jones</p>
+                </div>
+            </div>
+            <div class="card mb-6 shadow-sm">
+                <div class="card-body">
+                    <p></p><a class="btn btn-success"  href="#">Start Game</a></p>
+                    <p><img src="images/slice_4_1.png"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- join a game -->
+<section class="jumbotron text-left" id="join-game">
+    <div class="container">
+        <h1>Join a Game</h1>
+        <p class="lead text-muted">Please input the game code</p>
+        <input>
+        <a class="btn btn-success"  href="#">Join</a>
+    </div>
+</section>
+
+<!-- a round -->
+<div id="round">
+    <div class="container">
+        <div class="card-deck mb-3 text-center">
+            <div class="card mb-6 shadow-sm">
+                <div class="card-body">
+                    <img src="images/slice_4_1.png">
+                </div>
+            </div>
+            <div class="card mb-6 shadow-sm">
+                <div class="card-body">
+                    <img src="images/slice_0_0.png">
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="container">
+        <div class="card-deck mb-3 text-center">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <div class="container">
+                        <div class="btn-group btn-group-toggle" data-toggle="buttons">
+                            <label class="btn btn-secondary active">
+                                <input type="radio" name="options" id="option1" autocomplete="off" checked> Throw
+                            </label>
+                            <label class="btn btn-secondary">
+                                <input type="radio" name="options" id="option2" autocomplete="off"> Cut
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body">
+                    <div class="container">
+                        <div class="card-deck mb-4 text-center">
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_3_11.png">
+                                </div>
+                            </div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_2_10.png">
+                                </div>
+                            </div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_1_2.png">
+                                </div>
+                            </div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_0_5.png">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="container">
+                        <div class="card-deck mb-4 text-center">
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_3_8.png">
+                                </div>
+                            </div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_2_4.png">
+                                </div>
+                            </div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_2_5.png">
+                                </div>
+                            </div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_3_7.png">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- show cards -->
+<div id="show-cards">
+    <div class="container">
+        <div class="card-deck mb-3 text-center">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <div class="container">
+                        <div class="btn-group btn-group-toggle" data-toggle="buttons">
+                            <label class="btn btn-secondary active">Your Cards</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body">
+                    <div class="container">
+                        <div class="card-header" style="margin-bottom: 8px">
+                            Game 1
+                        </div>
+                        <div class="card-deck mb-4 text-center">
+
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_3_11.png">
+                                </div>
+                            </div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_2_10.png">
+                                </div>
+                            </div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_1_2.png">
+                                </div>
+                            </div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_0_5.png">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="container">
+                        <div class="card-header" style="margin-bottom: 8px">
+                            Game 2
+                        </div>
+                        <div class="card-deck mb-4 text-center">
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_3_8.png">
+                                </div>
+                            </div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_2_4.png">
+                                </div>
+                            </div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_2_5.png">
+                                </div>
+                            </div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_3_7.png">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="container">
+                        <div class="card-header" style="margin-bottom: 8px">
+                            Other Cards
+                        </div>
+                        <div class="card-deck mb-4 text-center">
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_3_8.png">
+                                </div>
+                            </div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_2_4.png">
+                                </div>
+                            </div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_2_5.png">
+                                </div>
+                            </div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <img src="images/slice_3_7.png">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="container">
+        <div class="card-deck mb-3 text-center">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <div class="container">
+                        <div class="btn-group btn-group-toggle" data-toggle="buttons">
+                            <label class="btn btn-secondary active">Player X</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body">
+                    <div class="container">
+                        <div class="card-header" style="margin-bottom: 8px">
+                            Game 1
+                        </div>
+                        <div class="card-deck mb-4 text-center">
+                            <div><a class="btn btn-success"  href="#">+</a></div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <p><img src="images/slice_3_11.png">
+                                </div>
+                            </div>
+                            <div><a class="btn btn-success"  href="#">+</a></div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <p><img src="images/slice_2_10.png">
+                                </div>
+                            </div>
+                            <div><a class="btn btn-success"  href="#">+</a></div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <p><img src="images/slice_1_2.png">
+                                </div>
+                            </div>
+                            <div><a class="btn btn-success"  href="#">+</a></div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <p><img src="images/slice_0_5.png">
+                                </div>
+                            </div>
+                            <div><a class="btn btn-success"  href="#">+</a></div>
+                        </div>
+                    </div>
+                    <div class="container">
+                        <div class="card-header" style="margin-bottom: 8px">
+                            Game 2
+                        </div>
+                        <div class="card-deck mb-4 text-center">
+                            <div><a class="btn btn-success"  href="#">+</a></div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <p><img src="images/slice_3_8.png">
+                                </div>
+                            </div>
+                            <div><a class="btn btn-success"  href="#">+</a></div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <p><img src="images/slice_2_4.png">
+                                </div>
+                            </div>
+                            <div><a class="btn btn-success"  href="#">+</a></div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <p><img src="images/slice_2_5.png">
+                                </div>
+                            </div>
+                            <div><a class="btn btn-success"  href="#">+</a></div>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <p><img src="images/slice_3_7.png">
+                                </div>
+                            </div>
+                            <div><a class="btn btn-success"  href="#">+</a></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+</div>
+</body>
+</html>

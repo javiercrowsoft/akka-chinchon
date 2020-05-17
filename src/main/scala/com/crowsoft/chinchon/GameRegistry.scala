@@ -14,8 +14,8 @@ abstract case class CardSuit(id: Int)
 object CardSuit {
   def apply(suit: Int): CardSuit = suit match  {
     case 1 => GOLD
-    case 2 => SPADE
-    case 3 => CUP
+    case 2 => CUP
+    case 3 => SPADE
     case 4 => CLUB
     case 5 => JOKER
   }
@@ -23,8 +23,8 @@ object CardSuit {
 }
 
 object GOLD extends CardSuit(1)
-object SPADE extends CardSuit(2)
-object CUP extends CardSuit(3)
+object CUP extends CardSuit(2)
+object SPADE extends CardSuit(3)
 object CLUB extends CardSuit(4)
 object JOKER extends CardSuit(5)
 final case class Card(number: Int, suit: CardSuit)
@@ -47,6 +47,7 @@ final case class Round(nextPlayer: GamePlayer,
                        cardsShowed: Boolean = false,
                        cardsDiscarded: Boolean = false)
 final case class Game(name: String,
+                      owner: String,
                       players: List[GamePlayer] = List(),
                       onDeck: List[Card] = List(),
                       onTable: List[Card] = List(),
@@ -55,7 +56,6 @@ final case class Game(name: String,
                       rounds: List[Round] = List())
 final case class Games(games: immutable.Seq[Game])
 final case class GameName(name: String)
-final case class RoundInfo(gameName: String)
 final case class TakeCardInfo(gameName: String, playerName: String, fromDeck: Boolean)
 final case class ThrowCardInfo(gameName: String, playerName: String, card: Card)
 final case class EndRoundInfo(gameName: String, playerName: String, card: Card, game1: List[Card], game2: List[Card])
@@ -69,19 +69,20 @@ object GameRegistry {
   // actor protocol
   sealed trait Command
   final case class GetGames(replyTo: ActorRef[Games]) extends Command
-  final case class CreateGame(newGame: NewGame, replyTo: ActorRef[ActionPerformed]) extends Command
+  final case class CreateGame(newGame: NewGame, replyTo: ActorRef[CreateGameResponse]) extends Command
   final case class GetGame(name: String, replyTo: ActorRef[GetGameResponse]) extends Command
   final case class DeleteGame(name: String, replyTo: ActorRef[ActionPerformed]) extends Command
   final case class JoinGame(player: Player, replyTo: ActorRef[ActionPerformed]) extends Command
   final case class StartGame(gameName: GameName, replyTo: ActorRef[ActionPerformed]) extends Command
-  final case class StartRound(round: RoundInfo, replyTo: ActorRef[ActionPerformed]) extends Command
+  final case class StartRound(round: GameName, replyTo: ActorRef[ActionPerformed]) extends Command
   final case class TakeCard(info: TakeCardInfo, replyTo: ActorRef[ActionPerformed]) extends Command
   final case class ThrowCard(info: ThrowCardInfo, replyTo: ActorRef[ActionPerformed]) extends Command
   final case class EndRound(info: EndRoundInfo, replyTo: ActorRef[ActionPerformed]) extends Command
   final case class ShowCards(info: ShowCardsInfo, replyTo: ActorRef[ActionPerformed]) extends Command
   final case class DiscardCards(info: DiscardCardsInfo, replyTo: ActorRef[ActionPerformed]) extends Command
   final case class GetGameResponse(maybeGame: Option[Game])
-  final case class ActionPerformed(description: String)
+  final case class CreateGameResponse(game: Option[Game], description: String)
+  final case class ActionPerformed(success: Boolean, description: String)
   case class User4CreateGameResponse(response: UserRegistry.GetUserResponse, createGame: CreateGame) extends Command
   case class User4JoinGameResponse(response: UserRegistry.GetUserResponse, joinGame: JoinGame) extends Command
   case class UserRegistryFailure(exception: Throwable) extends Command
@@ -109,12 +110,12 @@ object GameRegistry {
         Behaviors.same
 
       case User4CreateGameResponse(UserRegistry.GetUserResponse(Some(user)), createGame) =>
-        val game = Game(newGameId, List(GamePlayer(user)))
-        createGame.replyTo ! ActionPerformed(s"Game ${game.name} created.")
+        val game = Game(newGameId, user.name, List(GamePlayer(user)))
+        createGame.replyTo ! CreateGameResponse(Some(game), s"Game ${game.name} created.")
         registry(games + game)
 
       case User4CreateGameResponse(UserRegistry.GetUserResponse(None), createGame) =>
-        createGame.replyTo ! ActionPerformed(s"User ${createGame.newGame.userName} doesn't exists. Game was not created.")
+        createGame.replyTo ! CreateGameResponse(None, s"User ${createGame.newGame.userName} doesn't exists. Game was not created.")
         Behaviors.same
 
       case UserRegistryFailure(exception) =>
@@ -138,33 +139,33 @@ object GameRegistry {
             // check if player is not already in game
             game.players.find(_.user.name == user.name).fold[Behavior[Command]] { // add if not exists
               if (game.players.size < MAX_PLAYERS_PER_GAME) {
-                joinGame.replyTo ! ActionPerformed(s"User ${user.name} was added to game ${game.name}.")
+                joinGame.replyTo ! ActionPerformed(true, s"User ${user.name} was added to game ${game.name}.")
                 val updatedGames = (games - game) + game.copy(players = GamePlayer(user) :: game.players)
                 registry(updatedGames)
               } else {
-                joinGame.replyTo ! ActionPerformed(s"The maximum players of $MAX_PLAYERS_PER_GAME has been reached for game ${game.name}.")
+                joinGame.replyTo ! ActionPerformed(false, s"The maximum players of $MAX_PLAYERS_PER_GAME has been reached for game ${game.name}.")
                 Behaviors.same
               }
             } // already present
               { _ =>
-                joinGame.replyTo ! ActionPerformed(s"User ${user.name} is already present in game ${game.name}.")
+                joinGame.replyTo ! ActionPerformed(false, s"User ${user.name} is already present in game ${game.name}.")
                 Behaviors.same
               }
           }
         }
 
       case User4JoinGameResponse(UserRegistry.GetUserResponse(None), joinGame) =>
-        joinGame.replyTo ! ActionPerformed(s"User ${joinGame.player.userName} doesn't exists. Game was not updated.")
+        joinGame.replyTo ! ActionPerformed(false, s"User ${joinGame.player.userName} doesn't exists. Game was not updated.")
         Behaviors.same
 
       case StartGame(gameName, replyTo) =>
         whenGameExists(games, gameName.name, replyTo) { game =>
           whenGameIsGoingToStart(game, replyTo) {
             if (game.players.size < 2) {
-              replyTo ! ActionPerformed(s"The game ${gameName.name} only has one player. What a lonely game :(")
+              replyTo ! ActionPerformed(false, s"The game ${gameName.name} only has one player. What a lonely game :(")
               Behaviors.same
             } else {
-              replyTo ! ActionPerformed(s"Game ${gameName.name} was started.")
+              replyTo ! ActionPerformed(true, s"Game ${gameName.name} has started.")
               val updatedGames = (games - game) + game.copy(started = true, onDeck = deck)
               registry(updatedGames)
             }
@@ -172,7 +173,7 @@ object GameRegistry {
         }
 
       case StartRound(info, replyTo) =>
-        whenGameExists(games, info.gameName, replyTo) { game =>
+        whenGameExists(games, info.name, replyTo) { game =>
           whenGameIsRunning(game, replyTo) {
             game.rounds.headOption.fold {
               // rounds is empty so create the first one
@@ -205,6 +206,7 @@ object GameRegistry {
                   onTable = table,
                   players = updatePlayers(game.players, updatedPlayer)
                 )
+                replyTo ! ActionPerformed(true, s"In game ${game.name} player ${info.playerName} has taken card $card.")
                 updateGame(games, game, updatedGame)
               }
             }
@@ -221,8 +223,9 @@ object GameRegistry {
 
                 whenCardIsInPlayerHand(game, info.card, updatedCards, player, replyTo) {
                   val updatedPlayer = player.copy(cards = updatedCards)
-                  val updatedRound = round.copy(nextPlayer = updatedPlayer,
+                  val updatedRound = round.copy(nextPlayer = nextPlayer(game, game.players),
                     plays = round.plays.head.copy(cardThrown = Some(info.card)) :: round.plays.tail)
+                  replyTo ! ActionPerformed(true, s"In game ${game.name} player ${info.playerName} has throw card ${info.card}.")
                   updateRoundAndGame(games, info.card, game, updatedRound, updatedPlayer)
                 }
               }
@@ -240,7 +243,7 @@ object GameRegistry {
 
                 whenCardIsInPlayerHand(game, info.card, updatedCards, player, replyTo) {
                   if (!hasWinningHand(updatedCards, info)) {
-                    replyTo ! ActionPerformed(s"In $game player ${player.user.name} doesn't have a winning hand.")
+                    replyTo ! ActionPerformed(false, s"In ${game.name} player ${player.user.name} doesn't have a winning hand.")
                     Behaviors.same
                   }
                   else {
@@ -249,6 +252,7 @@ object GameRegistry {
                       plays = round.plays.head.copy(cardThrown = Some(info.card)) :: round.plays.tail,
                       scores = scores(game),
                       finished = true)
+                    replyTo ! ActionPerformed(true, s"In game ${game.name} player ${info.playerName} has end round with card ${info.card}.")
                     updateRoundAndGame(games, info.card, game, updatedRound, updatedPlayer)
                   }
                 }
@@ -268,6 +272,7 @@ object GameRegistry {
                                                     originalGame1 = info.game1,
                                                     originalGame2 = info.game2)
                     val updatedGame = game.copy(players = updatePlayers(game.players, updatedPlayer))
+                    replyTo ! ActionPerformed(true, s"In game ${game.name} player ${info.playerName} has shown cards.")
                     updateGame(games, game, updatedGame)
                   }
                 }
@@ -310,18 +315,21 @@ object GameRegistry {
 
                     val gameScores = updatedGame.rounds.map(_.scores).flatten
 
-                    val newLosers = if(updatedRound.cardsDiscarded) {
+                    val playersWithNewLosers = if(updatedRound.cardsDiscarded) {
                       updatedPlayers.map(p => {
                         val score = gameScores.filter(_.player.user.name == p.user.name).map(_.points).sum
                         p.copy(hasLost = score > MAX_SCORE, score = score)
                       })
                     } else updatedPlayers
 
-                    val finished = newLosers.filterNot(_.hasLost).size < 2
+                    val finished = playersWithNewLosers.filterNot(_.hasLost).size < 2
                     val gameWithLosers = updatedGame.copy(
                       finished = finished,
-                      players = if(finished) newLosers.sortBy(_.score) else newLosers
+                      players = if(finished) playersWithNewLosers.sortBy(_.score) else playersWithNewLosers
                     )
+                    replyTo ! ActionPerformed(true, s"In game ${game.name} player ${info.playerName} has discard cards."
+                      + (if(finished) s" The game has finished. Results: ${gameWithLosers.players.map(_.user.name).mkString(",")} "
+                         else ""))
                     updateGame(games, game, gameWithLosers)
                   }
                 }
@@ -334,7 +342,7 @@ object GameRegistry {
         Behaviors.same
 
       case DeleteGame(name, replyTo) =>
-        replyTo ! ActionPerformed(s"Game $name deleted.")
+        replyTo ! ActionPerformed(true, s"Game $name deleted.")
         registry(games.filterNot(_.name == name))
     }
 
@@ -361,11 +369,11 @@ object GameRegistry {
     def ifRoundFinished(gameName: String, round: Round, replyTo: ActorRef[ActionPerformed]
                        )(block: => Behavior[Command]): Behavior[Command] = {
       if (!round.finished) {
-        replyTo ! ActionPerformed(s"Current round for game ${gameName} is not finished yet.")
+        replyTo ! ActionPerformed(false, s"Current round for game ${gameName} is not finished yet.")
         Behaviors.same
       } else {
         if (!round.cardsDiscarded) {
-          replyTo ! ActionPerformed(s"Current round for game ${gameName} is waiting for players to discard cards.")
+          replyTo ! ActionPerformed(false, s"Current round for game ${gameName} is waiting for players to discard cards.")
           Behaviors.same
         } else {
           block
@@ -374,7 +382,7 @@ object GameRegistry {
     }
 
     def startRound(games: Set[Game], game: Game, replyTo: ActorRef[ActionPerformed]) = {
-      replyTo ! ActionPerformed(s"Round in game ${game.name} has started.")
+      replyTo ! ActionPerformed(true, s"Round in game ${game.name} has started.")
       val (updatedPlayers, cards, onTableCard) = giveCards(game.players)
       val updatedGames = (games - game) + game.copy(
         rounds = Round(nextPlayer(game, updatedPlayers)) :: game.rounds, players = updatedPlayers, onDeck = cards, onTable = onTableCard)
@@ -385,14 +393,17 @@ object GameRegistry {
   }
 
   def nextPlayer(game: Game, players: List[GamePlayer]) = {
-    def next(player: GamePlayer, players: List[GamePlayer]): GamePlayer = players match {
-      case _ :: Nil => players.head
-      case p :: t => if(p.user.name == player.user.name) t.head else next(player, t)
-      case _ => throw new IllegalStateException(s"Unable to find next player. Searching for $player in $game")
+    def next(player: GamePlayer, l: List[GamePlayer]): GamePlayer = l match {
+      case _ :: Nil =>
+        players.head
+      case p :: t =>
+        if(p.user.name == player.user.name) t.head else next(player, t)
+      case _ =>
+        throw new IllegalStateException(s"Unable to find next player. Searching for ${player.user.name} in ${game.name}")
     }
     game.rounds match {
       case Nil => players.head
-      case round :: t => next(round.nextPlayer, players)
+      case round :: _ => next(round.nextPlayer, players)
     }
   }
 
@@ -523,7 +534,7 @@ object GameRegistry {
   private def withPlayer(game: Game, playerName: String, replyTo: ActorRef[ActionPerformed]
                         )(block: GamePlayer => Behavior[Command]): Behavior[Command] = {
     game.players.find(p => p.user.name == playerName).fold[Behavior[Command]] {
-      replyTo ! ActionPerformed(s"$playerName is not found in game ${game.name}.")
+      replyTo ! ActionPerformed(false, s"$playerName is not found in game ${game.name}.")
       Behaviors.same
     }
     { player => block(player) }
@@ -536,7 +547,7 @@ object GameRegistry {
       cards.exists(c => ! player.cards.contains(c)) || cards.distinct.size != cards.size // duplicated cards
     }
     if(invalidCards || ! hasValidGames(player.cards, info.game1, info.game2)) {
-      replyTo ! ActionPerformed(s"Showed cards are not valid for user ${player.user.name} in game $game.")
+      replyTo ! ActionPerformed(false, s"Showed cards are not valid for user ${player.user.name} in game $game.")
       Behaviors.same
     }
     else block
@@ -567,7 +578,7 @@ object GameRegistry {
       )
     }
     if(invalidCards || invalidDiscard(game, info)) {
-      replyTo ! ActionPerformed(s"Discarded cards are not valid for user ${player.user.name} in game $game.")
+      replyTo ! ActionPerformed(false, s"Discarded cards are not valid for user ${player.user.name} in game $game.")
       Behaviors.same
     }
     else block
@@ -577,7 +588,7 @@ object GameRegistry {
                                      replyTo: ActorRef[ActionPerformed]
                                     )(block: => Behavior[Command]): Behavior[Command] = {
     if(cards.size == player.cards.size) {
-      replyTo ! ActionPerformed(s"In $game card ${card} is not in player's hand (${player.user.name})")
+      replyTo ! ActionPerformed(false, s"In ${game.name} card ${card} is not in ${player.user.name}'s hand (${player.cards}) ($cards)")
       Behaviors.same
     }
     else block
@@ -604,23 +615,23 @@ object GameRegistry {
     val maybeGame = games.find(_.name == gameName)
     maybeGame.fold[Behavior[Command]]
       { // game doesn't exists
-        replyTo ! ActionPerformed(s"Game ${gameName} doesn't exists.")
+        replyTo ! ActionPerformed(false, s"Game ${gameName} doesn't exists.")
         Behaviors.same
       } { block }
   }
 
   private def whenGameIsGoingToStart(game: Game, replyTo: ActorRef[ActionPerformed]
                                     )(block: => Behavior[Command]): Behavior[Command] = {
-    if(game.finished) replyTo ! ActionPerformed(s"The game ${game.name} has already finished.")
-    if(game.started) replyTo ! ActionPerformed(s"The game ${game.name} has already started.")
+    if(game.finished) replyTo ! ActionPerformed(false, s"The game ${game.name} has already finished.")
+    if(game.started) replyTo ! ActionPerformed(false, s"The game ${game.name} has already started.")
     if(game.started || game.finished) Behaviors.same
     else block
   }
 
   private def whenGameIsRunning(game: Game, replyTo: ActorRef[ActionPerformed]
                                )(block: => Behavior[Command]): Behavior[Command] = {
-    if(game.finished) replyTo ! ActionPerformed(s"The game ${game.name} has already finished.")
-    if(! game.started) replyTo ! ActionPerformed(s"The game ${game.name} has not started yet.")
+    if(game.finished) replyTo ! ActionPerformed(false, s"The game ${game.name} has already finished.")
+    if(! game.started) replyTo ! ActionPerformed(false, s"The game ${game.name} has not started yet.")
     if(! game.started || game.finished) Behaviors.same
     else block
   }
@@ -633,14 +644,15 @@ object GameRegistry {
                                                )(block: => Behavior[Command]): Behavior[Command] = {
     val roundRunning = game.rounds.headOption.exists(!_.finished)
     val action = if(takingACard) "take a card" else "throw a card"
+    val otherAction = if(takingACard) "throw a card" else "take a card"
     if(! roundRunning) {
-      replyTo ! ActionPerformed(s"You need to start a round in game ${game.name} to $action.")
+      replyTo ! ActionPerformed(false, s"You need to start a round in game ${game.name} to $action.")
       Behaviors.same
     } else {
       val round = game.rounds.head
       val nextPlayer = round.nextPlayer
       if(nextPlayer.user.name != playerName) {
-        replyTo ! ActionPerformed(s"Yuo are $playerName but next player to $action is ${nextPlayer.user.name}.")
+        replyTo ! ActionPerformed(false, s"Yuo are $playerName but next player to $action is ${nextPlayer.user.name}.")
         Behaviors.same
       } else {
         val invalidAction = if(takingACard) {
@@ -652,7 +664,7 @@ object GameRegistry {
           ! round.plays.headOption.exists(_.cardThrown.isEmpty)
         }
         if(invalidAction) {
-          replyTo ! ActionPerformed(s"In game ${game.name} next action is to $action to continue playing.")
+          replyTo ! ActionPerformed(false, s"In game ${game.name} next action is to $otherAction to continue playing.")
           Behaviors.same
         }
         else block
@@ -667,7 +679,7 @@ object GameRegistry {
                                   replyTo: ActorRef[ActionPerformed]
                                 )(block: GamePlayer => Behavior[Command]): Behavior[Command] = {
     game.players.find(p => p.user.name == playerName && ! p.cards.isEmpty).fold[Behavior[Command]] {
-        replyTo ! ActionPerformed(s"$playerName doesn't have any cards to $action in game ${game.name}.")
+        replyTo ! ActionPerformed(false, s"$playerName doesn't have any cards to $action in game ${game.name}.")
         Behaviors.same
       }
       { block }
@@ -679,7 +691,7 @@ object GameRegistry {
                                             )(block: => Behavior[Command]): Behavior[Command] = {
     val roundFinished = game.rounds.headOption.exists(_.finished)
     if(! roundFinished) {
-      replyTo ! ActionPerformed(s"In game ${game.name} round is not finished yet. You can't show your cards yet.")
+      replyTo ! ActionPerformed(false, s"In game ${game.name} round is not finished yet. You can't show your cards yet.")
       Behaviors.same
     }
     else block
@@ -692,7 +704,7 @@ object GameRegistry {
                                           )(block: => Behavior[Command]): Behavior[Command] = {
     val roundFinished = game.rounds.headOption.exists(_.finished)
     if(! roundFinished) {
-      replyTo ! ActionPerformed(s"In game ${game.name} round is not finished yet. You can't discard cards yet.")
+      replyTo ! ActionPerformed(false, s"In game ${game.name} round is not finished yet. You can't discard cards yet.")
       Behaviors.same
     }
     else block

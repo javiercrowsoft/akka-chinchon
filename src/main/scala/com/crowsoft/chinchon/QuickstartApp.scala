@@ -11,7 +11,7 @@ import scala.util.Failure
 import scala.util.Success
 
 //#main-class
-object QuickstartApp {
+object QuickstartApp extends CORSHandler {
   //#start-http-server
   private def startHttpServer(routes: Route, system: ActorSystem[_]): Unit = {
     // Akka HTTP still needs a classic ActorSystem to start
@@ -39,7 +39,8 @@ object QuickstartApp {
 
       val userRoutes = new UserRoutes(userRegistryActor)(context.system)
       val gameRoutes = new GameRoutes(gameRegistryActor)(context.system)
-      startHttpServer(userRoutes.userRoutes ~ gameRoutes.gameRoutes , context.system)
+
+      startHttpServer( corsHandler(WebRoutes.webRoutes ~ userRoutes.userRoutes ~ gameRoutes.gameRoutes) , context.system)
 
       Behaviors.empty
     }
