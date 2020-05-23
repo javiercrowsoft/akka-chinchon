@@ -16,6 +16,7 @@ let user
 let player
 let game
 let selectedCard
+let cardsArrangedByUser = []
 
 let discardRefresh = false
 
@@ -80,6 +81,7 @@ const clear = () => {
     gameCode = null
     player = null
     selectedCard = null
+    cardsArrangedByUser = []
     if(mainView) mainView.parentNode.removeChild(mainView);
 }
 
@@ -218,9 +220,9 @@ const takeCard = (fromDeck) => {
     }
 }
 
-const throwCard = () => {
+const throwOrEnd = (action, info) => {
     if(isNull(selectedCard)) return
-    postApiCall(apiPath + "/games/" + game.name + "/throw_card", {gameName: game.name, playerName: player.user.name, card: selectedCard})
+    postApiCall(apiPath + "/games/" + game.name + "/" + action, info)
         .then(() => {
             return getApiCall(apiPath + "/games/" + gameCode)
         })
@@ -230,9 +232,52 @@ const throwCard = () => {
         })
 }
 
+const throwCard = () => {
+    return throwOrEnd("throw_card",
+        {gameName: game.name, playerName: player.user.name, card: selectedCard})
+}
+
+const isJoker = (card) => {
+    return cardsAreEquals(b, jocker1) || cardsAreEquals(b, jocker2)
+}
+
+const moveIfJoker = (info) => {
+    if(isJoker(info.b)) {
+        info.b = cardsArrangedByUser[info.nextCardIndex]
+        info.offset += 1
+        info.nextCardIndex -= 1
+    }
+    return info
+}
+
+const lastCardInGame = (o) => {
+    return (isJoker(o.a) // wildcard at the end is always part of the game
+        || (
+            o.a.suit === o.b.suit && o.a.number+ o.offset === o.b.number // sequence game
+        )
+        || (
+            o.a.suit !== o.b.suit && o.a.number === o.b.number // same card number game
+        ))
+}
+
+const getGames = () => {
+    let game1 = cardsArrangedByUser.slice(0,3)
+    let game2 = cardsArrangedByUser.slice(4)
+    let o = { a: game[6], b: game[5], nextCardIndex: 4, offset: 1 }
+    o = moveIfJoker(o)
+    o = moveIfJoker(o)
+    if(! lastCardInGame(o)) {
+        game2.pop()
+    }
+    return Promise.resolve({game1: game1, game2: game2})
+}
+
 const endRound = () => {
-    if(isNull(selectedCard)) return
-    alert("End round with " + selectedCard)
+    getGames().then((games) => {
+        return throwOrEnd("throw_card",
+            {gameName: game.name, playerName: player.user.name, card: selectedCard,
+            game1: games.game1, game2: games.game2})
+        })
 }
 
 // refresh
@@ -257,8 +302,9 @@ const doRefresh = () => {
     })
 }
 
-const refresh = () => {
+const refresh = (now) => {
     discardRefresh = false
+    if(now) doRefresh()
     setTimeout(doRefresh, 3000)
 }
 
@@ -459,11 +505,107 @@ const selectCard = (card, image) => {
     }
 }
 
+const cardDragStart = (card) => {
+    return (ev) => {
+        discardRefresh = true
+        ev.dataTransfer.setData("application/my-app", ev.target.id);
+        ev.dataTransfer.dropEffect = "move";
+        console.log("drag start handler: s:" + card.suit + " n: " + card.number)
+    }
+}
+
+const cardDragoverHandler = (card) => {
+    return (ev) => {
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = "move";
+        console.log("drag over handler: s:" + card.suit + " n: " + card.number)
+    }
+}
+
+const getCardById = (id) => {
+    return player.cards.find((c) => { return getCardId(c) === id })
+}
+
+const cardsAreEquals = (a, b) => {
+    return a.suit === b.suit && a.number === b.number
+}
+
+const cardDropHandler = (card) => {
+    let __id = nextId()
+    return (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const data = ev.dataTransfer.getData("application/my-app");
+        const elem = document.getElementById(data)
+        let cardId = elem.dataset.cardId
+        const droppedCard = getCardById(cardId)
+
+        if(ev.target.dataset.isCard === "yes") {
+            cardId = ev.target.dataset.cardId
+        }
+        if(ev.target.dataset.isCardHolder === "yes") {
+           cardId = ev.target.childNodes[0].dataset.cardId
+        }
+        let cardAfter = getCardById(cardId)
+        let found = false
+        let foundAfterCard = false
+        let movedCard = droppedCard
+        for(let i = 0; i<cardsArrangedByUser.length; i++) {
+            if(! found) {
+                foundAfterCard = cardsAreEquals(cardsArrangedByUser[i], cardAfter)
+                found = foundAfterCard || cardsAreEquals(cardsArrangedByUser[i], droppedCard)
+            }
+            if(found) {
+                if (foundAfterCard) {
+                    const temp = cardsArrangedByUser[i]
+                    cardsArrangedByUser[i] = movedCard
+                    if (cardsAreEquals(temp, droppedCard)) {
+                        break;
+                    }
+                    movedCard = temp
+                }
+                else {
+                    cardsArrangedByUser[i] = cardsArrangedByUser[i+1]
+                    if (cardsAreEquals(cardsArrangedByUser[i], cardAfter)) {
+                        cardsArrangedByUser[i+1] = movedCard
+                        break;
+                    }
+                }
+            }
+        }
+        refresh(true)
+        console.log("drop handler: s:" + card.suit + " n: " + card.number + " id " + __id)
+    }
+}
+
+const nextId = (function() {
+    let _nextId = 1
+    return () => {
+        _nextId = _nextId+1
+        return "elem" + _nextId
+    }
+}())
+
+const getCardId = (card) => {
+    return "id_" + card.suit + "_" + card.number
+}
+
 const drawCard = (cardDeck, card) => {
     let cardBox = newCardBox()
     let cardBody = newCardBody()
+    cardBody.id = nextId()
+    cardBody.dataset.isCardHolder = "yes"
+    cardBody.ondrop = cardDropHandler(card)
+    cardBody.ondragover = cardDragoverHandler(card)
     let cardImage = img(getImageName(card))
+    cardImage.id = nextId()
+    cardImage.dataset.cardId = getCardId(card)
     cardImage.onclick = selectCard(card, cardImage)
+    cardImage.addEventListener("dragstart", cardDragStart(card))
+    cardImage.draggable = true
+    cardImage.ondrop = cardDropHandler(card)
+    cardImage.ondragover = cardDragoverHandler(card)
+    cardImage.dataset.isCard = "yes"
     cardBody.appendChild(cardImage)
     cardBox.appendChild(cardBody)
     cardDeck.appendChild(cardBox)
@@ -493,7 +635,26 @@ const addButton = (buttonGroup, id, text, active, action) => {
     buttonGroup.appendChild(label)
 }
 
+const cardExists = (card) => {
+    return (c) => {
+        return c.suit === card.suit && c.number === card.number
+    }
+}
+
+const updateCardIndex = () => {
+    cardsArrangedByUser = cardsArrangedByUser.filter((card) => {
+        return player.cards.filter(cardExists(card)).length > 0
+    })
+    player.cards.filter((card) => {
+        return cardsArrangedByUser.filter(cardExists(card)).length === 0
+    }).forEach((card) => {
+        cardsArrangedByUser.push(card)
+    })
+}
+
 const drawHand = (hand) => {
+    updateCardIndex()
+
     let cardHeader = newCardHeader()
     let container = newContainer()
     let buttonGroup = ce("div")
@@ -506,8 +667,8 @@ const drawHand = (hand) => {
     hand.appendChild(cardHeader)
 
     let cardBody = newCardBody()
-    drawCards(cardBody, player.cards.slice(0, 3))
-    drawCards(cardBody, player.cards.slice(3))
+    drawCards(cardBody, cardsArrangedByUser.slice(0, 4))
+    drawCards(cardBody, cardsArrangedByUser.slice(4))
     hand.appendChild(cardBody)
 }
 
@@ -533,9 +694,11 @@ const createGameTableView = () => {
     //
     cardBox = newCardBox()
     cardBody = newCardBody()
-    cardImage = img(getImageName(game.onTable[0]))
-    cardImage.onclick = takeCard(false)
-    cardBody.appendChild(cardImage)
+    if(game.onTable.length > 0) {
+        cardImage = img(getImageName(game.onTable[0]))
+        cardImage.onclick = takeCard(false)
+        cardBody.appendChild(cardImage)
+    }
     cardBox.appendChild(cardBody)
     cardDeck.appendChild(cardBox)
 
@@ -583,3 +746,11 @@ const main = () => {
     mainView = se("main-view")
     //startApp()
 }
+
+// these dummy declarations helps intellij to highlight errors
+//
+let dummyResponse = {game: {}}
+let dummyCard = {suit: 1, number: 1}
+let dummyGame = {rounds: [], players: [], onTable: [], onDeck: [], started: false, owner: {}}
+let dummyRound = {nextPlayer: ""}
+let dummyPlayer = {cards: []}

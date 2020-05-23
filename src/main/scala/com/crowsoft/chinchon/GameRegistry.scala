@@ -194,7 +194,7 @@ object GameRegistry {
               whenRoundIsRunningAndIsPlayerTurn(game, replyTo, info.playerName, true) {
                 val (card, deck, table) = {
                   if (info.fromDeck) (game.onDeck.head, game.onDeck.drop(1), game.onTable)
-                  else (game.onTable.head, game.onTable.drop(1), game.onDeck)
+                  else (game.onTable.head, game.onDeck, game.onTable.drop(1))
                 }
                 val round = game.rounds.head
                 val player = round.nextPlayer
@@ -433,17 +433,19 @@ object GameRegistry {
   }
 
   def isValidGame(cards: List[Card]) = {
-    val jokers = cards.filter(_ == joker).size
+    val jokers = cards.filter(isJoker).size
     if (jokers > 1 && cards.size < 4) false
     else {
-      val withoutJoker = cards.filterNot(_ == joker)
+      val withoutJoker = cards.filterNot(isJoker)
       isValidNumber(withoutJoker.head, withoutJoker.tail) || isValidSuit(jokers, withoutJoker.sortBy(_.number))
     }
   }
 
+  private def isJoker(card: Card) = card == joker1 || card == joker2
+
   private def invalidCards(cards: List[Card], game1: List[Card], game2: List[Card]) = {
-    ((game1.count(_ == joker) + game2.count(_ == joker) > 2)
-      || game1.exists(c => c != joker && game2.contains(c))
+    ((game1.count(isJoker) + game2.count(isJoker) > 2)
+      || game1.exists(c => isJoker(c) && game2.contains(c))
       || game1.exists(c => !cards.contains(c))
       || game2.exists(c => !cards.contains(c)))
   }
@@ -716,11 +718,12 @@ object GameRegistry {
 
   private def createDeck(suit: CardSuit) = (1 to 12).map(cardOf(suit))
 
-  val joker = cardOf(JOKER)(102)
+  val joker1 = cardOf(JOKER)(102)
+  val joker2 = cardOf(JOKER)(103)
   val MAX_SCORE = 102
 
   val deck = (
-    createDeck(SPADE) ++ createDeck(CLUB) ++ createDeck(CUP) ++ createDeck(CLUB) ++ List(joker, joker)
+    createDeck(SPADE) ++ createDeck(CLUB) ++ createDeck(CUP) ++ createDeck(GOLD) ++ List(joker1, joker2)
   ).toList
 
   def shuffle(deck: List[Card]) = Random.shuffle(deck)
