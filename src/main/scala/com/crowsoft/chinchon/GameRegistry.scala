@@ -247,7 +247,11 @@ object GameRegistry {
                     Behaviors.same
                   }
                   else {
-                    val updatedPlayer = player.copy(cards = updatedCards)
+                    val updatedPlayer = player.copy(game1 = info.game1,
+                                                    game2 = info.game2,
+                                                    originalGame1 = info.game1,
+                                                    originalGame2 = info.game2,
+                                                    cards = updatedCards)
                     val updatedRound = round.copy(nextPlayer = updatedPlayer,
                       plays = round.plays.head.copy(cardThrown = Some(info.card)) :: round.plays.tail,
                       scores = scores(game),
@@ -411,10 +415,10 @@ object GameRegistry {
     List()
   }
 
-  def isValidNumber(card: Card, cards: List[Card]) = (
+  def isValidNumber(card: Card, cards: List[Card], jokers: Int) = (
     !cards.exists(_.number != card.number)
-      && cards.size < 5
-      && cards.size > 2
+      && cards.size + jokers < 5
+      && cards.size + jokers > 2
     )
 
   def isValidSuit(jokers: Int, cards: List[Card]) = {
@@ -437,7 +441,7 @@ object GameRegistry {
     if (jokers > 1 && cards.size < 4) false
     else {
       val withoutJoker = cards.filterNot(isJoker)
-      isValidNumber(withoutJoker.head, withoutJoker.tail) || isValidSuit(jokers, withoutJoker.sortBy(_.number))
+      isValidNumber(withoutJoker.head, withoutJoker, jokers) || isValidSuit(jokers, withoutJoker.sortBy(_.number))
     }
   }
 
@@ -691,12 +695,23 @@ object GameRegistry {
                                               playerName: String,
                                               replyTo: ActorRef[ActionPerformed]
                                             )(block: => Behavior[Command]): Behavior[Command] = {
-    val roundFinished = game.rounds.headOption.exists(_.finished)
-    if(! roundFinished) {
-      replyTo ! ActionPerformed(false, s"In game ${game.name} round is not finished yet. You can't show your cards yet.")
+
+    if(game.rounds.isEmpty) {
+      replyTo ! ActionPerformed(false, s"You need to start a round in game ${game.name}.")
       Behaviors.same
     }
-    else block
+    else {
+      val roundFinished = game.rounds.headOption.exists(_.finished)
+      if (!roundFinished) {
+        replyTo ! ActionPerformed(false, s"In game ${game.name} round is not finished yet. You can't show your cards yet.")
+        Behaviors.same
+      }
+      else if (game.rounds.head.nextPlayer.user.name == playerName) {
+        replyTo ! ActionPerformed(false, s"In game ${game.name} you are the one who ended the round, so you already have shown your cards.")
+        Behaviors.same
+      }
+      else block
+    }
   }
 
   private def whenRoundIsWaitingForDiscard(

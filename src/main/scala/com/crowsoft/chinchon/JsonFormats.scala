@@ -35,6 +35,7 @@ object JsonFormats  {
   implicit val takeCardJsonFormat = jsonFormat3(TakeCardInfo)
   implicit val throwCardJsonFormat = jsonFormat3(ThrowCardInfo)
   implicit val endRoundJsonFormat = jsonFormat5(EndRoundInfo)
+  implicit val showCardsJsonFormat = jsonFormat4(ShowCardsInfo)
   implicit val discardCardGameJsonFormat = jsonFormat4(DiscardedCards)
   implicit val discardCardInfoJsonFormat = jsonFormat3(DiscardCardsInfo)
 

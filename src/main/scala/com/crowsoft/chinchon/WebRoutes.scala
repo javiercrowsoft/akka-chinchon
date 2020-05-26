@@ -16,7 +16,10 @@ object WebRoutes {
       path("api" / Segment) { file =>
         getFromResource(s"web/api/$file", ContentType(MediaTypes.`application/javascript`, () => HttpCharsets.`UTF-8`))
       },
-      path("style" / Segment) { file =>
+      path("styles" / Segment) { file =>
         getFromResource(s"web/styles/$file", ContentType(MediaTypes.`text/css`, () => HttpCharsets.`UTF-8`))
+      },
+      path("images" / Segment) { file =>
+        getFromResource(s"web/images/$file", ContentType(MediaTypes.`image/png`, () => HttpCharsets.`UTF-8`))
       })
 }

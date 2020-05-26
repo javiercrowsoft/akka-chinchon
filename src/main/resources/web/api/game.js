@@ -220,10 +220,11 @@ const takeCard = (fromDeck) => {
     }
 }
 
-const throwOrEnd = (action, info) => {
-    if(isNull(selectedCard)) return
+const throwOrEndOrShowOrDiscard = (action, info, isShowOrDiscard) => {
+    if(! isShowOrDiscard && isNull(selectedCard)) return
     postApiCall(apiPath + "/games/" + game.name + "/" + action, info)
         .then(() => {
+            selectedCard = null;
             return getApiCall(apiPath + "/games/" + gameCode)
         })
         .then((response) => {
@@ -233,17 +234,20 @@ const throwOrEnd = (action, info) => {
 }
 
 const throwCard = () => {
-    return throwOrEnd("throw_card",
-        {gameName: game.name, playerName: player.user.name, card: selectedCard})
+    return throwOrEndOrShowOrDiscard("throw_card",
+        {gameName: game.name, playerName: player.user.name, card: selectedCard}, false)
 }
 
+const joker1 = {suit: 5, number:102}
+const joker2 = {suit: 5, number:103}
+
 const isJoker = (card) => {
-    return cardsAreEquals(b, jocker1) || cardsAreEquals(b, jocker2)
+    return cardsAreEquals(card, joker1) || cardsAreEquals(card, joker2)
 }
 
 const moveIfJoker = (info) => {
-    if(isJoker(info.b)) {
-        info.b = cardsArrangedByUser[info.nextCardIndex]
+    if(isJoker(info.a)) {
+        info.a = cardsArrangedByUser[info.nextCardIndex]
         info.offset += 1
         info.nextCardIndex -= 1
     }
@@ -251,19 +255,116 @@ const moveIfJoker = (info) => {
 }
 
 const lastCardInGame = (o) => {
-    return (isJoker(o.a) // wildcard at the end is always part of the game
-        || (
-            o.a.suit === o.b.suit && o.a.number+ o.offset === o.b.number // sequence game
-        )
-        || (
-            o.a.suit !== o.b.suit && o.a.number === o.b.number // same card number game
-        ))
+    return (cardInGame(o) || isJoker(o.a)) // wildcard at the end is always part of the game
 }
 
-const getGames = () => {
-    let game1 = cardsArrangedByUser.slice(0,3)
-    let game2 = cardsArrangedByUser.slice(4)
-    let o = { a: game[6], b: game[5], nextCardIndex: 4, offset: 1 }
+const cardInGame = (o) => {
+    return (
+        (o.a.suit === o.b.suit && Math.max(o.a.number, o.b.number) - (Math.min(o.a.number, o.b.number) + o.offset) === 0)  // sequence game
+         ||
+        (o.a.suit !== o.b.suit && o.a.number === o.b.number) // same card number game
+    )
+}
+
+const isInGame = () => {
+    let o = { a: cardsArrangedByUser[2], b: cardsArrangedByUser[3], nextCardIndex: 1, offset: 1 }
+    o = moveIfJoker(o)
+    return cardInGame(o)
+}
+
+const isValidNumber = (card, cards, jokers) => {
+    return (
+        cards.filter((c) => {
+            return c.number !== card.number
+        }).length === 0
+        && cards.length + jokers < 5
+        && cards.length + jokers > 2
+    )
+}
+
+const isValidSuit = (jokers, cards) => {
+    const validateSequence = (jokers, cardNumber, cards) => {
+        if (cards.length === 0) {
+            return true
+        }
+        else {
+            if (cardNumber + 1 !== cards[0].number) {
+                if (jokers < 1) {
+                    return false
+                }
+                else {
+                    return validateSequence(jokers - 1, cardNumber + 1, cards)
+                }
+            }
+            else {
+                return validateSequence(jokers, cards[0].number, cards.slice(1))
+            }
+        }
+    }
+    if (cards.slice(1).filter((c) => {return c.suit !== cards[0].suit}).length > 0) {
+        return false
+    }
+    else {
+        return validateSequence(jokers, cards[0].number, cards.slice(1))
+    }
+}
+
+
+const isNotJoker = (card) => {
+    return ! isJoker(card)
+}
+
+const sortBy = (property) => {
+    return (a, b) => {
+        if (a[property] < b[property]) return -1
+        if (a[property] > b[property]) return 1
+        return 0
+    }
+}
+
+const isValidGame = (cards) => {
+    let jokers = cards.filter(isJoker).length
+    if (jokers > 1 && cards.length < 4) {
+        return false
+    }
+    else {
+        let withoutJoker = cards.filter(isNotJoker)
+        return (
+            isValidNumber(withoutJoker[0], withoutJoker, jokers)
+            || isValidSuit(jokers, withoutJoker.sort(sortBy("number")))
+        )
+    }
+}
+
+const validateGame = (game) => {
+    if(isValidGame(game)) {
+        return game
+    }
+    else {
+        return []
+    }
+}
+
+const getGames = (toShowCards) => {
+    let end
+    let start
+    if(isInGame()) {
+        end = 4
+        start = 4
+    }
+    else {
+        end = 3
+        start = 3
+    }
+    let game1 = cardsArrangedByUser.slice(0,end)
+    let game2 = cardsArrangedByUser.slice(start,7)
+
+    if(toShowCards) {
+        game1 = validateGame(game1)
+        game2 = validateGame(game2)
+    }
+
+    let o = { a: cardsArrangedByUser[5], b: cardsArrangedByUser[6], nextCardIndex: 4, offset: 1 }
     o = moveIfJoker(o)
     o = moveIfJoker(o)
     if(! lastCardInGame(o)) {
@@ -273,11 +374,20 @@ const getGames = () => {
 }
 
 const endRound = () => {
-    getGames().then((games) => {
-        return throwOrEnd("throw_card",
+    getGames(false).then((games) => {
+        return throwOrEndOrShowOrDiscard("end_round",
             {gameName: game.name, playerName: player.user.name, card: selectedCard,
-            game1: games.game1, game2: games.game2})
+                        game1: games.game1, game2: games.game2},
+            false)
         })
+}
+
+const showCards = () => {
+    getGames(true).then((games) => {
+        return throwOrEndOrShowOrDiscard("show_cards",
+            {gameName: game.name, playerName: player.user.name, game1: games.game1, game2: games.game2},
+            true)
+    })
 }
 
 // refresh
@@ -302,10 +412,16 @@ const doRefresh = () => {
     })
 }
 
+const getRefreshInterval = () => {
+    if(! game.started) return 5000
+    if(playingRound()) return 3000
+    if(showingCards()) return 8000
+}
+
 const refresh = (now) => {
     discardRefresh = false
     if(now) doRefresh()
-    setTimeout(doRefresh, 3000)
+    setTimeout(doRefresh, getRefreshInterval())
 }
 
 
@@ -404,7 +520,7 @@ const createNewGameView = () => {
     let section = ce("section")
     section.setAttribute("class","jumbotron text-left")
 
-    let isOwner = game.owner == user.name
+    let isOwner = game.owner === user.name
 
     // new game code
     //
@@ -652,16 +768,24 @@ const updateCardIndex = () => {
     })
 }
 
-const drawHand = (hand) => {
+const drawHand = (hand, toShowCards) => {
     updateCardIndex()
 
     let cardHeader = newCardHeader()
     let container = newContainer()
     let buttonGroup = ce("div")
+
     buttonGroup.setAttribute("class", "btn-group btn-group-toggle")
     buttonGroup.setAttribute("data-toggle", "buttons")
-    addButton(buttonGroup, "throw-action-trow", "Throw", "active", throwCard)
-    addButton(buttonGroup, "throw-action-cut", "Cut", "", endRound)
+
+    if(toShowCards) {
+        addButton(buttonGroup, "throw-action-show-cards", "Show Cards", "", showCards)
+    }
+    else {
+        addButton(buttonGroup, "throw-action-trow", "Throw", "active", throwCard)
+        addButton(buttonGroup, "throw-action-cut", "Cut", "", endRound)
+    }
+
     container.appendChild(buttonGroup)
     cardHeader.appendChild(container)
     hand.appendChild(cardHeader)
@@ -672,8 +796,7 @@ const drawHand = (hand) => {
     hand.appendChild(cardBody)
 }
 
-const createGameTableView = () => {
-    createGameView()
+const createPlayingRound = () => {
     let container = newContainer()
 
     // table
@@ -694,7 +817,7 @@ const createGameTableView = () => {
     //
     cardBox = newCardBox()
     cardBody = newCardBody()
-    if(game.onTable.length > 0) {
+    if (game.onTable.length > 0) {
         cardImage = img(getImageName(game.onTable[0]))
         cardImage.onclick = takeCard(false)
         cardBody.appendChild(cardImage)
@@ -711,7 +834,7 @@ const createGameTableView = () => {
     cardDeck = newCardDeck()
     cardBox = newCardBox()
 
-    drawHand(cardBox)
+    drawHand(cardBox, false)
 
     cardDeck.appendChild(cardBox)
     container.appendChild(cardDeck)
@@ -722,8 +845,105 @@ const createGameTableView = () => {
     container.appendChild(p)
 
     gameView.appendChild(container)
+}
 
-    if(! isMyTurn()) refresh()
+const drawShowCards = (hand, player) => {
+
+    let cardHeader = newCardHeader()
+    let container = newContainer()
+    container.appendChild(h(3, player.user.name))
+    cardHeader.appendChild(container)
+    hand.appendChild(cardHeader)
+
+    let cardBody = newCardBody()
+    drawCards(cardBody, player.game1)
+    drawCards(cardBody, player.game2)
+    hand.appendChild(cardBody)
+}
+
+const showCardsOfOtherPlayer = (player) => {
+    let container = newContainer()
+    let cardDeck = newCardDeck()
+    let cardBox = newCardBox()
+
+    drawShowCards(cardBox, player)
+
+    cardDeck.appendChild(cardBox)
+    container.appendChild(cardDeck)
+
+    gameView.appendChild(container)
+}
+
+const showMyCards = () => {
+    let container = newContainer()
+    let cardDeck = newCardDeck()
+    let cardBox = newCardBox()
+
+    container.appendChild(h(3,"Arrange your game and click on Show cards button"))
+    container.appendChild(h(5,"You can see the game of other players bellow your own hand"))
+
+    drawHand(cardBox, true)
+
+    cardDeck.appendChild(cardBox)
+    container.appendChild(cardDeck)
+
+    gameView.appendChild(container)
+}
+
+const createShowingCards = () => {
+
+    showMyCards()
+
+    let self = player
+
+    game.players.forEach((player) => {
+
+        if(player.user.name !== self.user.name) {
+            showCardsOfOtherPlayer(player)
+        }
+    })
+
+    let container = newContainer()
+    let p = ce("p")
+    p.innerHTML = "Game: " + gameCode + " - Arrange your game and click on 'Show Cards' button. You can see the game of other players bellow your own hand"
+    container.appendChild(p)
+    gameView.appendChild(container)
+}
+
+const roundFinished = () => {
+    return game.rounds[game.rounds.length-1].finished
+}
+
+const playingRound = () => {
+    return game.started && ! roundFinished()
+}
+
+const showingCards = () => {
+    return roundFinished() && ! cardsShowed()
+}
+
+const cardsShowed = () => {
+    return game.rounds[game.rounds.length-1].cardsShowed
+}
+
+const cardsDiscarded = () => {
+    return game.rounds[game.rounds.length-1].cardsDiscarded
+}
+
+const createGameTableView = () => {
+    createGameView()
+
+    if(! roundFinished()) {
+        createPlayingRound()
+    }
+    else if(! cardsShowed()) {
+        createShowingCards()
+    }
+    else if(! cardsDiscarded()) {
+
+    }
+
+    if(! isMyTurn() || showingCards()) refresh()
 }
 
 const nextPlayer = () => {
@@ -752,5 +972,5 @@ const main = () => {
 let dummyResponse = {game: {}}
 let dummyCard = {suit: 1, number: 1}
 let dummyGame = {rounds: [], players: [], onTable: [], onDeck: [], started: false, owner: {}}
-let dummyRound = {nextPlayer: ""}
+let dummyRound = {nextPlayer: "", cardsShowed: false, finished: false, cardsDiscarded: false, scores: []}
 let dummyPlayer = {cards: []}
