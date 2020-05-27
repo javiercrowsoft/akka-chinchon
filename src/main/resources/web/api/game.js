@@ -17,6 +17,7 @@ let player
 let game
 let selectedCard
 let cardsArrangedByUser = []
+let otherPlayers = []
 
 let discardRefresh = false
 
@@ -642,11 +643,29 @@ const getCardById = (id) => {
     return player.cards.find((c) => { return getCardId(c) === id })
 }
 
+const getOthersCardById = (playerName, id) => {
+    let player = otherPlayers.find((p) => {return p.user.name === playerName})
+    if(isNull(player)) {
+        player = game.players.find((p) => {
+            return p.user.name === playerName
+        })
+        otherPlayers.push(player)
+    }
+    let card = player.game1.find((c) => { return getCardId(c) === id })
+    if(card) {
+        return {otherPlayerGame: player.game1, cardAfter: card}
+    }
+    card = player.game2.find((c) => { return getCardId(c) === id })
+    if(card) {
+        return {otherPlayerGame: player.game2, cardAfter: card}
+    }
+}
+
 const cardsAreEquals = (a, b) => {
     return a.suit === b.suit && a.number === b.number
 }
 
-const cardDropHandler = (card) => {
+const cardDropHandlerMyCards = (card) => {
     let __id = nextId()
     return (ev) => {
         ev.preventDefault();
@@ -694,6 +713,43 @@ const cardDropHandler = (card) => {
     }
 }
 
+const cardDropHandlerOtherCards = (card) => {
+    let __id = nextId()
+    return (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const data = ev.dataTransfer.getData("application/my-app");
+        const elem = document.getElementById(data)
+        let cardId = elem.dataset.cardId
+        const droppedCard = getCardById(cardId)
+
+        let playerName
+        if(ev.target.dataset.isCard === "yes") {
+            cardId = ev.target.dataset.cardId
+            playerName = ev.target.dataset.playerName
+        }
+        if(ev.target.dataset.isCardHolder === "yes") {
+            cardId = ev.target.childNodes[0].dataset.cardId
+            playerName = ev.target.childNodes[0].dataset.playerName
+        }
+        let {otherPlayerGame, cardAfter} = getOthersCardById(playerName, cardId)
+        let found = false
+        let movedCard = droppedCard
+        for(let i = 0, count = otherPlayerGame.length+1; i<count; i++) {
+            if(! found) {
+                found = cardsAreEquals(otherPlayerGame[i], cardAfter)
+            }
+            if(found) {
+                const temp = otherPlayerGame[i]
+                otherPlayerGame[i] = movedCard
+                movedCard = temp
+            }
+        }
+        refresh(true)
+        console.log("drop handler: s:" + card.suit + " n: " + card.number + " id " + __id)
+    }
+}
+
 const nextId = (function() {
     let _nextId = 1
     return () => {
@@ -706,35 +762,52 @@ const getCardId = (card) => {
     return "id_" + card.suit + "_" + card.number
 }
 
-const drawCard = (cardDeck, card) => {
+const setDragAndDropMyCards = (cardBody, cardImage, card) => {
+    cardBody.ondrop = cardDropHandlerMyCards(card)
+    cardImage.ondrop = cardDropHandlerMyCards(card)
+    setDragAndDrop(cardBody, cardImage, card)
+}
+
+const setDragAndDropOthersCards = (playerName) => {
+    return (cardBody, cardImage, card) => {
+        cardImage.dataset.playerName = playerName
+        cardBody.ondrop = cardDropHandlerOtherCards(card)
+        cardImage.ondrop = cardDropHandlerOtherCards(card)
+        setDragAndDrop(cardBody, cardImage, card)
+    }
+}
+
+const setDragAndDrop = (cardBody, cardImage, card) => {
+    cardBody.ondragover = cardDragoverHandler(card)
+    cardBody.dataset.isCardHolder = "yes"
+    cardImage.dataset.cardId = getCardId(card)
+    cardImage.draggable = true
+    cardImage.dataset.isCard = "yes"
+    cardImage.ondragover = cardDragoverHandler(card)
+    cardImage.addEventListener("dragstart", cardDragStart(card))
+}
+
+const drawCard = (cardDeck, card, setDragAndDrop) => {
     let cardBox = newCardBox()
     let cardBody = newCardBody()
     cardBody.id = nextId()
-    cardBody.dataset.isCardHolder = "yes"
-    cardBody.ondrop = cardDropHandler(card)
-    cardBody.ondragover = cardDragoverHandler(card)
     let cardImage = img(getImageName(card))
     cardImage.id = nextId()
-    cardImage.dataset.cardId = getCardId(card)
     cardImage.onclick = selectCard(card, cardImage)
-    cardImage.addEventListener("dragstart", cardDragStart(card))
-    cardImage.draggable = true
-    cardImage.ondrop = cardDropHandler(card)
-    cardImage.ondragover = cardDragoverHandler(card)
-    cardImage.dataset.isCard = "yes"
+    setDragAndDrop(cardBody, cardImage, card)
     cardBody.appendChild(cardImage)
     cardBox.appendChild(cardBody)
     cardDeck.appendChild(cardBox)
 }
 
-const drawCards = (cardBody, cards) => {
+const drawCards = (cardBody, cards, setDragAndDrop) => {
     let container = newContainer()
     let cardDeck = newCardDeck()
     cardBody.appendChild(container)
     container.appendChild(cardDeck)
 
     cards.forEach((card) => {
-        drawCard(cardDeck, card)
+        drawCard(cardDeck, card, setDragAndDrop)
     })
 }
 
@@ -791,8 +864,8 @@ const drawHand = (hand, toShowCards) => {
     hand.appendChild(cardHeader)
 
     let cardBody = newCardBody()
-    drawCards(cardBody, cardsArrangedByUser.slice(0, 4))
-    drawCards(cardBody, cardsArrangedByUser.slice(4))
+    drawCards(cardBody, cardsArrangedByUser.slice(0, 4), setDragAndDropMyCards)
+    drawCards(cardBody, cardsArrangedByUser.slice(4), setDragAndDropMyCards)
     hand.appendChild(cardBody)
 }
 
@@ -856,8 +929,11 @@ const drawShowCards = (hand, player) => {
     hand.appendChild(cardHeader)
 
     let cardBody = newCardBody()
-    drawCards(cardBody, player.game1)
-    drawCards(cardBody, player.game2)
+
+    let updatedPlayer = otherPlayers.find((p) => {return p.user.name === player.user.name}) || player
+
+    drawCards(cardBody, updatedPlayer.game1, setDragAndDropOthersCards(updatedPlayer.user.name))
+    drawCards(cardBody, updatedPlayer.game2, setDragAndDropOthersCards(updatedPlayer.user.name))
     hand.appendChild(cardBody)
 }
 
