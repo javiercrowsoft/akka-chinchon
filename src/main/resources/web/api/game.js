@@ -16,8 +16,12 @@ let user
 let player
 let game
 let selectedCard
-let cardsArrangedByUser = []
-let otherPlayers = []
+let cardsArrangedByUser = []  // my hand state in browser
+let otherPlayers = []         // others hand state in browser
+
+let blankCard = {}
+let blankCardInGame1 = {suit: 5, number: 3}
+let blankCardInGame2 = {suit: 5, number: 4}
 
 let discardRefresh = false
 
@@ -255,22 +259,29 @@ const moveIfJoker = (info) => {
     return info
 }
 
-const lastCardInGame = (o) => {
-    return (cardInGame(o) || isJoker(o.a)) // wildcard at the end is always part of the game
+const lastCardInGame = (o, cards) => {
+    return (cardInGame(o, cards) || isJoker(o.a)) // wildcard at the end is always part of the game
 }
 
-const cardInGame = (o) => {
+const cardInGame = (o, cards) => {
+    let jokers = cards.filter(isJoker).length
+    let withoutJoker = cards.filter(isNotJoker)
     return (
-        (o.a.suit === o.b.suit && Math.max(o.a.number, o.b.number) - (Math.min(o.a.number, o.b.number) + o.offset) === 0)  // sequence game
-         ||
-        (o.a.suit !== o.b.suit && o.a.number === o.b.number) // same card number game
+        (
+            o.a.suit === o.b.suit
+            && Math.max(o.a.number, o.b.number) - (Math.min(o.a.number, o.b.number) + o.offset) === 0  // sequence game
+            && isValidSuit(jokers, withoutJoker.sort(sortBy("number")))
+        ) || (
+            o.a.suit !== o.b.suit && o.a.number === o.b.number
+            && isValidNumber(cards[0], cards, jokers)
+        ) // same card number game
     )
 }
 
-const isInGame = () => {
+const fourthCardIsInGame1 = () => {
     let o = { a: cardsArrangedByUser[2], b: cardsArrangedByUser[3], nextCardIndex: 1, offset: 1 }
     o = moveIfJoker(o)
-    return cardInGame(o)
+    return cardInGame(o, cardsArrangedByUser.slice(0,3))
 }
 
 const isValidNumber = (card, cards, jokers) => {
@@ -349,7 +360,7 @@ const validateGame = (game) => {
 const getGames = (toShowCards) => {
     let end
     let start
-    if(isInGame()) {
+    if(fourthCardIsInGame1()) {
         end = 4
         start = 4
     }
@@ -368,10 +379,23 @@ const getGames = (toShowCards) => {
     let o = { a: cardsArrangedByUser[5], b: cardsArrangedByUser[6], nextCardIndex: 4, offset: 1 }
     o = moveIfJoker(o)
     o = moveIfJoker(o)
-    if(! lastCardInGame(o)) {
+    if(! lastCardInGame(o, game2.slice(0,3))) {
         game2.pop()
     }
     return Promise.resolve({game1: game1, game2: game2})
+}
+
+const getDiscardedCards = () => {
+    return Promise.resolve(
+        otherPlayers.map(p => {
+            return {
+                playerName: p.user.name,
+                game1: p.game1,
+                game2: p.game2,
+                discardedCards: p.game1.filter(c => c.discarded === true).concat(p.game2.filter(c => c.discarded === true))
+            }
+        })
+    )
 }
 
 const endRound = () => {
@@ -387,6 +411,14 @@ const showCards = () => {
     getGames(true).then((games) => {
         return throwOrEndOrShowOrDiscard("show_cards",
             {gameName: game.name, playerName: player.user.name, game1: games.game1, game2: games.game2},
+            true)
+    })
+}
+
+const discardCards = () => {
+    getDiscardedCards().then((discardedCards) => {
+        return throwOrEndOrShowOrDiscard("discard_cards",
+            {gameName: game.name, playerName: player.user.name, discard: discardedCards},
             true)
     })
 }
@@ -417,11 +449,15 @@ const getRefreshInterval = () => {
     if(! game.started) return 5000
     if(playingRound()) return 3000
     if(showingCards()) return 8000
+    debugger;
+    throw new Error("Can't get refresh interval")
 }
 
 const refresh = (now) => {
     discardRefresh = false
-    if(now) doRefresh()
+    if(now) {
+        doRefresh()
+    }
     setTimeout(doRefresh, getRefreshInterval())
 }
 
@@ -643,7 +679,7 @@ const getCardById = (id) => {
     return player.cards.find((c) => { return getCardId(c) === id })
 }
 
-const getOthersCardById = (playerName, id) => {
+const getOthersHandById = (playerName, id) => {
     let player = otherPlayers.find((p) => {return p.user.name === playerName})
     if(isNull(player)) {
         player = game.players.find((p) => {
@@ -651,13 +687,23 @@ const getOthersCardById = (playerName, id) => {
         })
         otherPlayers.push(player)
     }
-    let card = player.game1.find((c) => { return getCardId(c) === id })
-    if(card) {
-        return {otherPlayerGame: player.game1, cardAfter: card}
+    if(isBlankCard(id)) {
+        let game = isBlankCardGame1(id) ? player.game1 : player.game2
+        return {otherPlayerGame: game, cardAfter: blankCard}
     }
-    card = player.game2.find((c) => { return getCardId(c) === id })
-    if(card) {
-        return {otherPlayerGame: player.game2, cardAfter: card}
+    else {
+        let card = player.game1.find((c) => {
+            return getCardId(c) === id
+        })
+        if (card) {
+            return {otherPlayerGame: player.game1, cardAfter: card}
+        }
+        card = player.game2.find((c) => {
+            return getCardId(c) === id
+        })
+        if (card) {
+            return {otherPlayerGame: player.game2, cardAfter: card}
+        }
     }
 }
 
@@ -722,8 +768,8 @@ const cardDropHandlerOtherCards = (card) => {
         const elem = document.getElementById(data)
         let cardId = elem.dataset.cardId
         const droppedCard = getCardById(cardId)
-
         let playerName
+
         if(ev.target.dataset.isCard === "yes") {
             cardId = ev.target.dataset.cardId
             playerName = ev.target.dataset.playerName
@@ -732,22 +778,63 @@ const cardDropHandlerOtherCards = (card) => {
             cardId = ev.target.childNodes[0].dataset.cardId
             playerName = ev.target.childNodes[0].dataset.playerName
         }
-        let {otherPlayerGame, cardAfter} = getOthersCardById(playerName, cardId)
+
+        removeCardInOtherGames(droppedCard)
+
+        let {otherPlayerGame, cardAfter} = getOthersHandById(playerName, cardId)
         let found = false
         let movedCard = droppedCard
-        for(let i = 0, count = otherPlayerGame.length+1; i<count; i++) {
-            if(! found) {
-                found = cardsAreEquals(otherPlayerGame[i], cardAfter)
-            }
-            if(found) {
-                const temp = otherPlayerGame[i]
-                otherPlayerGame[i] = movedCard
-                movedCard = temp
+        if(cardAfter === blankCard) {
+            otherPlayerGame[otherPlayerGame.length] = movedCard
+        }
+        else {
+            for (let i = 0, count = otherPlayerGame.length + 1; i < count; i++) {
+                if (!found) {
+                    found = cardsAreEquals(otherPlayerGame[i], cardAfter)
+                }
+                if (found) {
+                    const temp = otherPlayerGame[i]
+                    otherPlayerGame[i] = movedCard
+                    movedCard = temp
+                }
             }
         }
+        discardCard(droppedCard)
+
         refresh(true)
         console.log("drop handler: s:" + card.suit + " n: " + card.number + " id " + __id)
     }
+}
+
+const removeCardInOtherGames = (card) => {
+    otherPlayers.forEach(p => {
+        p.game1 = removeCard(p.game1, card)
+        p.game2 = removeCard(p.game2, card)
+    })
+}
+
+const isBlankCardGame1 = (cardId) => {
+    return getCardId(blankCardInGame1) === cardId
+}
+
+const isBlankCardGame2 = (cardId) => {
+    return getCardId(blankCardInGame2) === cardId
+}
+
+const isBlankCard = (cardId) => {
+    return isBlankCardGame1(cardId) || isBlankCardGame2(cardId)
+}
+
+const removeCard = (cards, card) => {
+    let id = getCardId(card)
+    return cards.filter(c=> getCardId(c) !== id)
+}
+
+const discardCard = (card) => {
+    card.discarded = true
+    const id = getCardId(card)
+    card = cardsArrangedByUser.find((c) => { return getCardId(c) === id })
+    card.discarded = true
 }
 
 const nextId = (function() {
@@ -791,6 +878,9 @@ const drawCard = (cardDeck, card, setDragAndDrop) => {
     let cardBox = newCardBox()
     let cardBody = newCardBody()
     cardBody.id = nextId()
+    if(card.discarded) {
+        cardBody.style.backgroundColor = "navajowhite"
+    }
     let cardImage = img(getImageName(card))
     cardImage.id = nextId()
     cardImage.onclick = selectCard(card, cardImage)
@@ -800,15 +890,21 @@ const drawCard = (cardDeck, card, setDragAndDrop) => {
     cardDeck.appendChild(cardBox)
 }
 
-const drawCards = (cardBody, cards, setDragAndDrop) => {
+const drawCards = (cardBody, cards, setDragAndDrop, showDiscarded, blankCard) => {
     let container = newContainer()
     let cardDeck = newCardDeck()
     cardBody.appendChild(container)
     container.appendChild(cardDeck)
 
     cards.forEach((card) => {
-        drawCard(cardDeck, card, setDragAndDrop)
+        if(card.discarded !== true || showDiscarded === true) {
+            drawCard(cardDeck, card, setDragAndDrop)
+        }
     })
+
+    if(blankCard !== undefined && cards.length > 0) {
+        drawCard(cardDeck, blankCard, setDragAndDrop)
+    }
 }
 
 const addButton = (buttonGroup, id, text, active, action) => {
@@ -853,6 +949,9 @@ const drawHand = (hand, toShowCards) => {
 
     if(toShowCards) {
         addButton(buttonGroup, "throw-action-show-cards", "Show Cards", "", showCards)
+        if(cardsShowed()) {
+            addButton(buttonGroup, "throw-action-discard-cards", "Discard Cards", "", discardCards)
+        }
     }
     else {
         addButton(buttonGroup, "throw-action-trow", "Throw", "active", throwCard)
@@ -920,7 +1019,7 @@ const createPlayingRound = () => {
     gameView.appendChild(container)
 }
 
-const drawShowCards = (hand, player) => {
+const drawShowCardsOfOtherPlayer = (hand, player, showDiscarded) => {
 
     let cardHeader = newCardHeader()
     let container = newContainer()
@@ -932,8 +1031,8 @@ const drawShowCards = (hand, player) => {
 
     let updatedPlayer = otherPlayers.find((p) => {return p.user.name === player.user.name}) || player
 
-    drawCards(cardBody, updatedPlayer.game1, setDragAndDropOthersCards(updatedPlayer.user.name))
-    drawCards(cardBody, updatedPlayer.game2, setDragAndDropOthersCards(updatedPlayer.user.name))
+    drawCards(cardBody, updatedPlayer.game1, setDragAndDropOthersCards(updatedPlayer.user.name), showDiscarded, blankCardInGame1)
+    drawCards(cardBody, updatedPlayer.game2, setDragAndDropOthersCards(updatedPlayer.user.name), showDiscarded, blankCardInGame2)
     hand.appendChild(cardBody)
 }
 
@@ -942,7 +1041,7 @@ const showCardsOfOtherPlayer = (player) => {
     let cardDeck = newCardDeck()
     let cardBox = newCardBox()
 
-    drawShowCards(cardBox, player)
+    drawShowCardsOfOtherPlayer(cardBox, player, true)
 
     cardDeck.appendChild(cardBox)
     container.appendChild(cardDeck)
@@ -995,7 +1094,7 @@ const playingRound = () => {
 }
 
 const showingCards = () => {
-    return roundFinished() && ! cardsShowed()
+    return roundFinished() && (! cardsShowed() || ! cardsDiscarded())
 }
 
 const cardsShowed = () => {
@@ -1012,10 +1111,10 @@ const createGameTableView = () => {
     if(! roundFinished()) {
         createPlayingRound()
     }
-    else if(! cardsShowed()) {
+    else if(! cardsShowed() || ! cardsDiscarded()) {
         createShowingCards()
     }
-    else if(! cardsDiscarded()) {
+    else if(cardsDiscarded()) {
 
     }
 
@@ -1040,7 +1139,7 @@ const startApp = () => {
 
 const main = () => {
     mainView = se("main-view")
-    //startApp()
+    startApp()
 }
 
 // these dummy declarations helps intellij to highlight errors

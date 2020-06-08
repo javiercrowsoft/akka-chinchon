@@ -21,5 +21,9 @@ object WebRoutes {
       },
       path("images" / Segment) { file =>
         getFromResource(s"web/images/$file", ContentType(MediaTypes.`image/png`, () => HttpCharsets.`UTF-8`))
-      })
+      },
+      path("favicon.ico") {
+        getFromResource("web/images/favico/favicon.ico", ContentType(MediaTypes.`image/x-icon`, () => HttpCharsets.`UTF-8`)) // will look for the file inside your `resources` folder
+      }
+    )
 }

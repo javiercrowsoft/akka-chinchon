@@ -37,7 +37,8 @@ final case class GamePlayer(user: User,
                             originalGame1: List[Card] = List(),
                             originalGame2: List[Card] = List(),
                             hasLost: Boolean = false,
-                            score: Int = 0)
+                            score: Int = 0,
+                            cardsShowed: Boolean = false)
 final case class Play(user: User, cardTaken: Card, cardThrown: Option[Card] = None)
 final case class Score(player: GamePlayer, points: Int)
 final case class Round(nextPlayer: GamePlayer,
@@ -251,7 +252,8 @@ object GameRegistry {
                                                     game2 = info.game2,
                                                     originalGame1 = info.game1,
                                                     originalGame2 = info.game2,
-                                                    cards = updatedCards)
+                                                    cards = updatedCards,
+                                                    cardsShowed = true)
                     val updatedRound = round.copy(nextPlayer = updatedPlayer,
                       plays = round.plays.head.copy(cardThrown = Some(info.card)) :: round.plays.tail,
                       scores = scores(game),
@@ -274,8 +276,17 @@ object GameRegistry {
                     val updatedPlayer = player.copy(game1 = info.game1,
                                                     game2 = info.game2,
                                                     originalGame1 = info.game1,
-                                                    originalGame2 = info.game2)
-                    val updatedGame = game.copy(players = updatePlayers(game.players, updatedPlayer))
+                                                    originalGame2 = info.game2,
+                                                    cardsShowed = true)
+                    val updatedPlayers = updatePlayers(game.players, updatedPlayer)
+                    val round = game.rounds.head
+                    val updatedRound = round.copy(
+                      cardsShowed = updatedPlayers.forall(_.cardsShowed)
+                    )
+                    val updatedGame = game.copy(
+                      players = updatedPlayers,
+                      rounds = updatedRound :: game.rounds.tail
+                    )
                     replyTo ! ActionPerformed(true, s"In game ${game.name} player ${info.playerName} has shown cards.")
                     updateGame(games, game, updatedGame)
                   }
@@ -607,7 +618,7 @@ object GameRegistry {
       case Nil => (newPlayers.reverse, deck.drop(1), List(deck.head))
       case p :: tail =>
         val cards = deck.take(7)
-        val player = p.copy(cards = cards)
+        val player = p.copy(cards = cards, cardsShowed = false)
         giveCards(tail, player :: newPlayers, deck.drop(7))
     }
 

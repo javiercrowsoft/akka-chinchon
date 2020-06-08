@@ -3,9 +3,11 @@ package com.crowsoft.chinchon
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.adapter._
 import akka.actor.typed.scaladsl.Behaviors
+import akka.event.Logging
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.directives.DebuggingDirectives
 
 import scala.util.Failure
 import scala.util.Success
@@ -40,7 +42,10 @@ object QuickstartApp extends CORSHandler {
       val userRoutes = new UserRoutes(userRegistryActor)(context.system)
       val gameRoutes = new GameRoutes(gameRegistryActor)(context.system)
 
-      startHttpServer( corsHandler(WebRoutes.webRoutes ~ userRoutes.userRoutes ~ gameRoutes.gameRoutes) , context.system)
+      val route = corsHandler(WebRoutes.webRoutes ~ userRoutes.userRoutes ~ gameRoutes.gameRoutes)
+      val routeLogged = DebuggingDirectives.logRequestResult("Client ReST", Logging.InfoLevel)(route)
+
+      startHttpServer(routeLogged , context.system)
 
       Behaviors.empty
     }
