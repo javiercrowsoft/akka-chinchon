@@ -1,6 +1,7 @@
 # Run
-
+```
 sbt run
+```
 
 Browse http://localhost:8080/
 
