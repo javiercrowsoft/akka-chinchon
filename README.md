@@ -2,7 +2,9 @@
 
 sbt run
 
-# Commands
+Browse http://localhost:8080/
+
+# Backend Commands
 
 ## User
 
@@ -53,17 +55,35 @@ sbt assembly
 scala target/scala-2.13/akka-chinchon-assembly-0.1.0-SNAPSHOT.jar
 
 ### Docker
-Run this command to create a docker image
+
+#### To create a docker image
 
 sbt docker:publishLocal
 
-To start container
+#### To start container
 
 docker run --publish 8080:8080 --detach --name chinchon akka-chinchon:0.1.0-SNAPSHOT 
 
-To stop
+#### To stop
 
 docker rm --force chinchon
 
+#### To publish in Docker Hub
+
+docker login --username=javier2018
+
+docker tag {{IMAGE_ID}} javier2018/akkachinchon:{{semantic version}}
+
+docker push {{tag you just created}}
+
+#### To deploy in AWS
+
+ssh_cairo_amazon
+
+docker run --publish 8080:8080 --detach --name chinchon javier2018/akkachinchon:0.1.0
+
 ### To see code
 cat `find . \( -name '*.scala' -o -name '*.js' -o -name '*.java' \) -print` | perl -pe "system 'sleep .003'"
+
+
+(*) este readme parece escrito por el profesor Jirafales pero en TO TO TO TO !!! 
