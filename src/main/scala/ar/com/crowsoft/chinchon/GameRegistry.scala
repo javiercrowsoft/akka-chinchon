@@ -1,4 +1,4 @@
-package com.crowsoft.chinchon
+package ar.com.crowsoft.chinchon
 
 //#game-registry-actor
 import akka.actor.typed.scaladsl.Behaviors

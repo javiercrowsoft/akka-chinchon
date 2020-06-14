@@ -1,11 +1,11 @@
-package com.crowsoft.chinchon
+package ar.com.crowsoft.chinchon
 
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 
 import scala.concurrent.Future
-import com.crowsoft.chinchon.GameRegistry._
+import ar.com.crowsoft.chinchon.GameRegistry._
 import akka.actor.typed.ActorRef
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.AskPattern._

@@ -1,6 +1,6 @@
-package com.crowsoft.chinchon
+package ar.com.crowsoft.chinchon
 
-import com.crowsoft.chinchon.GameRegistry.CreateGameResponse
+import ar.com.crowsoft.chinchon.GameRegistry.CreateGameResponse
 import spray.json.{JsNumber, JsValue, JsonFormat}
 
 //#json-formats

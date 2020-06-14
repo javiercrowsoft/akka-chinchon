@@ -21,6 +21,6 @@ lazy val root = (project in file(".")).
     )
   )
 
-mainClass in Compile := Some("com.crowsoft.chinchon.QuickstartApp")
+mainClass in Compile := Some("ar.com.crowsoft.chinchon.QuickstartApp")
 enablePlugins(JavaAppPackaging)
 enablePlugins(DockerPlugin)

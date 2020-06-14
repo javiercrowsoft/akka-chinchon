@@ -1,4 +1,4 @@
-package com.crowsoft.chinchon
+package ar.com.crowsoft.chinchon
 
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.adapter._

@@ -1,4 +1,4 @@
-package com.crowsoft.chinchon
+package ar.com.crowsoft.chinchon
 
 import java.time.Duration
 
@@ -9,9 +9,9 @@ import akka.http.scaladsl.marshalling.Marshal
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.util.Timeout
-import com.crowsoft.chinchon.GameRegistry._
-import com.crowsoft.chinchon.UserRegistry.{CreateUser, ActionPerformed => UserActionPerform}
-import com.crowsoft.chinchon.Util.waitAll
+import ar.com.crowsoft.chinchon.GameRegistry._
+import ar.com.crowsoft.chinchon.UserRegistry.{CreateUser, ActionPerformed => UserActionPerform}
+import ar.com.crowsoft.chinchon.Util.waitAll
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.concurrent.Waiters.Waiter
 import org.scalatest.{Matchers, WordSpec}

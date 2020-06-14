@@ -1,4 +1,4 @@
-package com.crowsoft.chinchon
+package ar.com.crowsoft.chinchon
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Random, Success}
