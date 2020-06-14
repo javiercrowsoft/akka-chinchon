@@ -43,3 +43,27 @@ curl -XPOST 'localhost:8080/games//players' -d '{"userName":"Jean Foe", "gameNam
 
 ### Expose local server to other computers in local network
 ssh -R 80:localhost:8080 ssh.localhost.run
+
+### Build
+
+sbt assembly
+
+### Run
+
+scala target/scala-2.13/akka-chinchon-assembly-0.1.0-SNAPSHOT.jar
+
+### Docker
+Run this command to create a docker image
+
+sbt docker:publishLocal
+
+To start container
+
+docker run --publish 8080:8080 --detach --name chinchon akka-chinchon:0.1.0-SNAPSHOT 
+
+To stop
+
+docker rm --force chinchon
+
+### To see code
+cat `find . \( -name '*.scala' -o -name '*.js' -o -name '*.java' \) -print` | perl -pe "system 'sleep .003'"

@@ -38,7 +38,8 @@ final case class GamePlayer(user: User,
                             originalGame2: List[Card] = List(),
                             hasLost: Boolean = false,
                             score: Int = 0,
-                            cardsShowed: Boolean = false)
+                            cardsShowed: Boolean = false,
+                            cardsDiscarded: Boolean = false)
 final case class Play(user: User, cardTaken: Card, cardThrown: Option[Card] = None)
 final case class Score(player: GamePlayer, points: Int)
 final case class Round(nextPlayer: GamePlayer,
@@ -82,7 +83,7 @@ object GameRegistry {
   final case class ShowCards(info: ShowCardsInfo, replyTo: ActorRef[ActionPerformed]) extends Command
   final case class DiscardCards(info: DiscardCardsInfo, replyTo: ActorRef[ActionPerformed]) extends Command
   final case class GetGameResponse(maybeGame: Option[Game])
-  final case class CreateGameResponse(game: Option[Game], description: String)
+  final case class CreateGameResponse(success: Boolean, game: Option[Game], description: String)
   final case class ActionPerformed(success: Boolean, description: String)
   case class User4CreateGameResponse(response: UserRegistry.GetUserResponse, createGame: CreateGame) extends Command
   case class User4JoinGameResponse(response: UserRegistry.GetUserResponse, joinGame: JoinGame) extends Command
@@ -112,11 +113,11 @@ object GameRegistry {
 
       case User4CreateGameResponse(UserRegistry.GetUserResponse(Some(user)), createGame) =>
         val game = Game(newGameId, user.name, List(GamePlayer(user)))
-        createGame.replyTo ! CreateGameResponse(Some(game), s"Game ${game.name} created.")
+        createGame.replyTo ! CreateGameResponse(true, Some(game), s"Game ${game.name} created.")
         registry(games + game)
 
       case User4CreateGameResponse(UserRegistry.GetUserResponse(None), createGame) =>
-        createGame.replyTo ! CreateGameResponse(None, s"User ${createGame.newGame.userName} doesn't exists. Game was not created.")
+        createGame.replyTo ! CreateGameResponse(false, None, s"User ${createGame.newGame.userName} doesn't exists. Game was not created.")
         Behaviors.same
 
       case UserRegistryFailure(exception) =>
@@ -305,7 +306,7 @@ object GameRegistry {
                     // update players
                     //
                     val discardedCards = info.discard.map(_.discardedCards).flatten ++ player.game1 ++ player.game2
-                    val updatedPlayer = player.copy(cards = List())
+                    val updatedPlayer = player.copy(cards = List(), cardsDiscarded = true)
                     val playersWithNewGames = game.players.map(p => {
                       info.discard.find(_.playerName == p.user.name).fold(p) {d =>
                         p.copy(game1 = d.game1, game2 = d.game2)
@@ -480,6 +481,12 @@ object GameRegistry {
   }
 
   private def hasWinningHand(cards: List[Card], info: EndRoundInfo) = {
+    def isValidRest = {
+      val notInGameCard = cards.filterNot(info.game1.contains).filterNot(info.game2.contains)
+      if(notInGameCard.size > 1) false
+      else notInGameCard.headOption.map(_.number < 5).getOrElse(true)
+    }
+
     if (info.game1.distinct.size != info.game1.size) {
       false
     } else if (info.game2.distinct.size != info.game2.size) {
@@ -489,16 +496,28 @@ object GameRegistry {
     } else if (info.game1.size < 6 && info.game2.size < 3) {
       false
     } else if (info.game1.size >= 6) {
-      if (info.game1.exists(c => !cards.exists(_ == c))) {
+      if (info.game1.exists(c => !cards.contains(c))) {
         false
-      } else {
-        isValidGame(info.game1)
+      } else if(! isValidGame(info.game1)) {
+        false
+      }
+      else {
+        isValidRest
       }
     } else {
-      if (invalidCards(cards, info.game1, info.game2)) {
+      if (info.game1.exists(c => !cards.contains(c))
+        || info.game2.exists(c => !cards.contains(c))) {
+        false
+      }
+      else if (invalidCards(cards, info.game1, info.game2)) {
         false
       } else {
-        isValidGame(info.game1) && isValidGame(info.game2)
+        if(! isValidGame(info.game1) && isValidGame(info.game2)) {
+          false
+        }
+        else {
+          isValidRest
+        }
       }
     }
   }
@@ -575,7 +594,7 @@ object GameRegistry {
       game.players.find(_.user.name == discard.playerName).fold(false) { player =>
         // remove discarded cards from game1 and game2 informed by player who is discarding cards
         ( discard.game1.filterNot(discard.discardedCards.contains) != player.game1     // compare with game 1
-          || discard.game2.filterNot(discard.discardedCards.contains) != player.game1  // compare with game 2
+          || discard.game2.filterNot(discard.discardedCards.contains) != player.game2  // compare with game 2
           || ! hasValidGames(player.cards ++ discard.discardedCards, discard.game1, discard.game2)
         )
       }
@@ -588,7 +607,8 @@ object GameRegistry {
     def invalidCards = {
       val cardsInGames = player.originalGame1 ++ player.originalGame2
       val discardedCards = info.discard.map(_.discardedCards).flatten
-      ( cardsInGames.size + discardedCards.size != 7
+      val notInGameCards = player.cards.filterNot(discardedCards.contains).filterNot(cardsInGames.contains)
+      ( cardsInGames.size + discardedCards.size + notInGameCards.size != 7
         || discardedCards.exists(c => ! player.cards.contains(c)) // discarded card is not in players hand
         || discardedCards.distinct.size != discardedCards.size // duplicated cards
         || discardedCards.exists(cardsInGames.contains) // discarded card is in player game
@@ -618,7 +638,13 @@ object GameRegistry {
       case Nil => (newPlayers.reverse, deck.drop(1), List(deck.head))
       case p :: tail =>
         val cards = deck.take(7)
-        val player = p.copy(cards = cards, cardsShowed = false)
+        val player = p.copy(cards = cards,
+                            cardsShowed = false,
+                            cardsDiscarded = false,
+                            game1 = List(),
+                            game2 = List(),
+                            originalGame1 = List(),
+                            originalGame2 = List())
         giveCards(tail, player :: newPlayers, deck.drop(7))
     }
 

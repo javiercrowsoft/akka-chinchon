@@ -1,1 +1,6 @@
 .bg-purple { background-color: #6f42c1; }
+
+.offscreen {
+    position: absolute;
+    left: -999em;
+}

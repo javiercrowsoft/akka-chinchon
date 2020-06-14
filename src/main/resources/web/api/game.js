@@ -1,6 +1,8 @@
 "use strict";
 
-const apiPath = "http://localhost:8080"
+// TO be able to edit and continue :P
+// const apiPath = "http://localhost:8080"
+const apiPath = ""
 
 const d = document
 const div = "div"
@@ -23,7 +25,7 @@ let blankCard = {}
 let blankCardInGame1 = {suit: 5, number: 3}
 let blankCardInGame2 = {suit: 5, number: 4}
 
-let discardRefresh = false
+let cancelRefresh = false
 
 const isNull = (value) => {
     return value === null || value === undefined
@@ -96,32 +98,40 @@ const showError = (message) => {
     alert(message)
 }
 
-const apiCall = (call) => {
-    discardRefresh = true
+const apiCall = (call, isForPost) => {
+    cancelRefresh = true
     return call.catch((error) => {
         showError('Error when calling API:' + error.message)
+        return Promise.reject()
     })
     .then((response) => {
         if(response.ok) {
             return response.json()
         } else {
             showError('Error when calling API')
+            return Promise.reject()
         }
     }).then((response) => {
-        if(response.success === false) {
+        if(isForPost === true && response.success === false) {
             showError(response.description)
         }
-        else {
-            if(response.success === true) {
-                console.log(response.description)
-            }
-            return response
-        }
+        return response
     })
 }
 
 const getApiCall = (url) => {
     return apiCall(fetch(url))
+}
+
+const ifSuccess = (block) => {
+    return (response) => {
+        if(! isNull(response) && response.success === true) {
+            return block(response)
+        }
+        else {
+            return Promise.reject()
+        }
+    }
 }
 
 const postApiCall = (url, data) => {
@@ -131,7 +141,7 @@ const postApiCall = (url, data) => {
         headers:{
             'Content-Type': 'application/json'
         }
-    }))
+    }), true)
 }
 
 const registerUser = (nextAction) => {
@@ -142,22 +152,22 @@ const registerUser = (nextAction) => {
         } else {
             let newUser = {name: playerName, age: 110, countryOfResidence: "Arisa"}
             postApiCall(apiPath + "/users", newUser)
-                .then(() => {
+                .then(ifSuccess(() => {
                     user = newUser
                     topTitle.innerHTML = "Buggy Games Chinchonazo - Welcome " + newUser.name
                     nextAction()
-                })
+                }))
         }
     }
 }
 
 const createNewGame = () => {
     postApiCall(apiPath + "/games", {userName: user.name})
-        .then((response) => {
+        .then(ifSuccess((response) => {
             game = response.game
             gameCode = game.name
             createNewGameView()
-        })
+        }))
 }
 
 const newGame = () => {
@@ -195,16 +205,22 @@ const joinGame = () => {
 
 const startGame = () => {
     postApiCall(apiPath + "/games/" + game.name + "/start", {name: game.name})
-        .then(() => {
-            return postApiCall(apiPath + "/games/" + game.name + "/start_round", {name: game.name})
-        })
-        .then(() => {
-            return getApiCall(apiPath + "/games/" + gameCode)
-        })
-        .then((response) => {
-            updateGame(response)
-            createGameTableView()
-        })
+        .then(ifSuccess(startRound))
+}
+
+const startRound = () => {
+    // clean state of round
+    otherPlayers = []
+    cardsArrangedByUser = []
+
+    postApiCall(apiPath + "/games/" + game.name + "/start_round", {name: game.name})
+    .then(() => {
+        return getApiCall(apiPath + "/games/" + gameCode)
+    })
+    .then((response) => {
+        updateGame(response)
+        createGameTableView()
+    })
 }
 
 const updateGame = (updatedGame) => {
@@ -225,13 +241,17 @@ const takeCard = (fromDeck) => {
     }
 }
 
-const throwOrEndOrShowOrDiscard = (action, info, isShowOrDiscard) => {
-    if(! isShowOrDiscard && isNull(selectedCard)) return
-    postApiCall(apiPath + "/games/" + game.name + "/" + action, info)
-        .then(() => {
+const throwOrEndOrShowOrDiscard = (action, info, isShowOrDiscard, isDiscard) => {
+    if(! isShowOrDiscard && isNull(selectedCard)) return Promise.reject()
+    return postApiCall(apiPath + "/games/" + game.name + "/" + action, info)
+        .then(ifSuccess(() => {
             selectedCard = null;
+            if(isDiscard) {
+                otherPlayers = []
+                cardsArrangedByUser = []
+            }
             return getApiCall(apiPath + "/games/" + gameCode)
-        })
+        }))
         .then((response) => {
             updateGame(response)
             updateViewGame()
@@ -250,9 +270,9 @@ const isJoker = (card) => {
     return cardsAreEquals(card, joker1) || cardsAreEquals(card, joker2)
 }
 
-const moveIfJoker = (info) => {
+const moveIfJoker = (info, cards) => {
     if(isJoker(info.a)) {
-        info.a = cardsArrangedByUser[info.nextCardIndex]
+        info.a = cards[info.nextCardIndex]
         info.offset += 1
         info.nextCardIndex -= 1
     }
@@ -266,6 +286,10 @@ const lastCardInGame = (o, cards) => {
 const cardInGame = (o, cards) => {
     let jokers = cards.filter(isJoker).length
     let withoutJoker = cards.filter(isNotJoker)
+    if(o.a == undefined || o.b == undefined) {
+        debugger
+        throw new Error("invalid state for object o")
+    }
     return (
         (
             o.a.suit === o.b.suit
@@ -273,15 +297,16 @@ const cardInGame = (o, cards) => {
             && isValidSuit(jokers, withoutJoker.sort(sortBy("number")))
         ) || (
             o.a.suit !== o.b.suit && o.a.number === o.b.number
-            && isValidNumber(cards[0], cards, jokers)
+            && isValidNumber(cards[0], withoutJoker, jokers)
         ) // same card number game
     )
 }
 
-const fourthCardIsInGame1 = () => {
-    let o = { a: cardsArrangedByUser[2], b: cardsArrangedByUser[3], nextCardIndex: 1, offset: 1 }
-    o = moveIfJoker(o)
-    return cardInGame(o, cardsArrangedByUser.slice(0,3))
+const fourthCardIsInGame = (cards) => {
+    let o = { a: cards[2], b: cards[3], nextCardIndex: 1, offset: 1 }
+    o = moveIfJoker(o, cards)
+    o = moveIfJoker(o, cards)
+    return cardInGame(o, cards)
 }
 
 const isValidNumber = (card, cards, jokers) => {
@@ -358,29 +383,38 @@ const validateGame = (game) => {
 }
 
 const getGames = (toShowCards) => {
-    let end
-    let start
-    if(fourthCardIsInGame1()) {
-        end = 4
-        start = 4
-    }
-    else {
-        end = 3
-        start = 3
-    }
-    let game1 = cardsArrangedByUser.slice(0,end)
-    let game2 = cardsArrangedByUser.slice(start,7)
+    let game1 = []
+    let game2 = []
+    if(cardsArrangedByUser.length > 0) {
+        let end
+        let start
+        if(fourthCardIsInGame(cardsArrangedByUser.slice(0,4))) {
+            end = 4
+            start = 4
+        }
+        else {
+            end = 3
+            start = 3
+        }
+        game1 = cardsArrangedByUser.slice(0,end)
+        game2 = cardsArrangedByUser.slice(start,7)
 
-    if(toShowCards) {
-        game1 = validateGame(game1)
-        game2 = validateGame(game2)
-    }
+        if(toShowCards) {
+            game1 = validateGame(game1)
+            if(game2.length > 3 &&  ! fourthCardIsInGame(game2)) {
+                game2 = game2.slice(0,3)
+            }
+            game2 = validateGame(game2)
+        }
 
-    let o = { a: cardsArrangedByUser[5], b: cardsArrangedByUser[6], nextCardIndex: 4, offset: 1 }
-    o = moveIfJoker(o)
-    o = moveIfJoker(o)
-    if(! lastCardInGame(o, game2.slice(0,3))) {
-        game2.pop()
+        if(game2.length > 3) {
+            let o = {a: game2[2], b: game2[3], nextCardIndex: 1, offset: 1}
+            o = moveIfJoker(o, game2)
+            o = moveIfJoker(o, game2)
+            if (!lastCardInGame(o, game2.slice(0, 3))) {
+                game2.pop()
+            }
+        }
     }
     return Promise.resolve({game1: game1, game2: game2})
 }
@@ -419,7 +453,7 @@ const discardCards = () => {
     getDiscardedCards().then((discardedCards) => {
         return throwOrEndOrShowOrDiscard("discard_cards",
             {gameName: game.name, playerName: player.user.name, discard: discardedCards},
-            true)
+            true, true)
     })
 }
 
@@ -435,7 +469,7 @@ const updateViewGame = () => {
 }
 
 const doRefresh = () => {
-    if(discardRefresh) return
+    if(cancelRefresh) return
     if(isNull(gameCode) || gameCode.trim() === "") return
 
     getApiCall(apiPath + "/games/" + gameCode)
@@ -449,12 +483,13 @@ const getRefreshInterval = () => {
     if(! game.started) return 5000
     if(playingRound()) return 3000
     if(showingCards()) return 8000
-    debugger;
+    if(waitingForRoundToStart()) return 3000
+    debugger
     throw new Error("Can't get refresh interval")
 }
 
 const refresh = (now) => {
-    discardRefresh = false
+    cancelRefresh = false
     if(now) {
         doRefresh()
     }
@@ -463,6 +498,23 @@ const refresh = (now) => {
 
 
 // views
+let copyArea
+
+const createCopyArea = () => {
+    copyArea = document.createElement("textarea");
+    copyArea.className = "offscreen"
+    copyArea.setAttribute('aria-hidden', 'true')
+    document.body.appendChild(copyArea)
+}
+
+const copy = (text) => {
+    return () => {
+        copyArea.value= text
+        copyArea.select();
+        copyArea.setSelectionRange(0, 99999)
+        document.execCommand("copy")
+    }
+}
 
 const newButton = (text, action) => {
     let newGameButton = ce("a")
@@ -570,7 +622,9 @@ const createNewGameView = () => {
     text = isOwner ? "This is the code you must share with your friends so they can join the game you just created" : "You can invite more friends with this code"
     label.innerHTML = text
     container.appendChild(label)
-    let gameCode = h(1, game.name)
+    let gameCode = h(1, game.name + "    ")
+    let copyButton = newButton("Copy", copy(game.name))
+    gameCode.appendChild(copyButton)
     container.appendChild(gameCode)
     section.appendChild(container)
 
@@ -660,7 +714,7 @@ const selectCard = (card, image) => {
 
 const cardDragStart = (card) => {
     return (ev) => {
-        discardRefresh = true
+        cancelRefresh = true
         ev.dataTransfer.setData("application/my-app", ev.target.id);
         ev.dataTransfer.dropEffect = "move";
         console.log("drag start handler: s:" + card.suit + " n: " + card.number)
@@ -708,6 +762,10 @@ const getOthersHandById = (playerName, id) => {
 }
 
 const cardsAreEquals = (a, b) => {
+    if(a == undefined || b == undefined) {
+        debugger
+        throw new Error("invalid state for objects a and b")
+    }
     return a.suit === b.suit && a.number === b.number
 }
 
@@ -874,15 +932,41 @@ const setDragAndDrop = (cardBody, cardImage, card) => {
     cardImage.addEventListener("dragstart", cardDragStart(card))
 }
 
+const getCardIdBody = (card) => {
+    return "B_" + getCardId(card)
+}
+
+const getCardIdImage = (card) => {
+    return "I_" + getCardId(card)
+}
+
+const getCardBodyByCard = (card) => {
+    let elem = document.getElementById(getCardIdBody(card))
+    if(isNull(elem)) {
+        debugger
+        throw new Error("Can't get an element for card " + card)
+    }
+    return elem
+}
+
+const getCardImageByCard = (card) => {
+    let elem = document.getElementById(getCardIdImage(card))
+    if(isNull(elem)) {
+        debugger
+        throw new Error("Can't get an element for card " + card)
+    }
+    return elem
+}
+
 const drawCard = (cardDeck, card, setDragAndDrop) => {
     let cardBox = newCardBox()
     let cardBody = newCardBody()
-    cardBody.id = nextId()
+    cardBody.id = getCardIdBody(card)
     if(card.discarded) {
         cardBody.style.backgroundColor = "navajowhite"
     }
     let cardImage = img(getImageName(card))
-    cardImage.id = nextId()
+    cardImage.id = getCardIdImage(card)
     cardImage.onclick = selectCard(card, cardImage)
     setDragAndDrop(cardBody, cardImage, card)
     cardBody.appendChild(cardImage)
@@ -948,8 +1032,10 @@ const drawHand = (hand, toShowCards) => {
     buttonGroup.setAttribute("data-toggle", "buttons")
 
     if(toShowCards) {
-        addButton(buttonGroup, "throw-action-show-cards", "Show Cards", "", showCards)
-        if(cardsShowed()) {
+        if(! cardsShowed()) {
+            addButton(buttonGroup, "throw-action-show-cards", "Show Cards", "", showCards)
+        }
+        else {
             addButton(buttonGroup, "throw-action-discard-cards", "Discard Cards", "", discardCards)
         }
     }
@@ -1019,6 +1105,20 @@ const createPlayingRound = () => {
     gameView.appendChild(container)
 }
 
+const colorInGame = (card, color) => {
+    getCardBodyByCard(card).style.backgroundColor = color
+}
+
+const colorInGame1 = (card) => colorInGame(card, "lightblue")
+const colorInGame2 = (card) => colorInGame(card, "yellow")
+
+const putColorInGame = () => {
+    getGames(true).then((games) => {
+        games.game1.forEach(colorInGame1)
+        games.game2.forEach(colorInGame2)
+    })
+}
+
 const drawShowCardsOfOtherPlayer = (hand, player, showDiscarded) => {
 
     let cardHeader = newCardHeader()
@@ -1054,8 +1154,14 @@ const showMyCards = () => {
     let cardDeck = newCardDeck()
     let cardBox = newCardBox()
 
-    container.appendChild(h(3,"Arrange your game and click on Show cards button"))
-    container.appendChild(h(5,"You can see the game of other players bellow your own hand"))
+    if(! cardsShowed()) {
+        container.appendChild(h(3, "Arrange your game and click on Show cards button"))
+        container.appendChild(h(5, "You can see the game of other players bellow your own hand"))
+    }
+    else {
+        container.appendChild(h(3, "Try to discard your cards in others games"))
+        container.appendChild(h(5, "You can see the game of other players bellow your own hand. When ready press the discard button"))
+    }
 
     drawHand(cardBox, true)
 
@@ -1066,11 +1172,9 @@ const showMyCards = () => {
 }
 
 const createShowingCards = () => {
-
     showMyCards()
 
     let self = player
-
     game.players.forEach((player) => {
 
         if(player.user.name !== self.user.name) {
@@ -1085,8 +1189,104 @@ const createShowingCards = () => {
     gameView.appendChild(container)
 }
 
+const createStartRound = () => {
+    let cardDeck = newCardDeck()
+    let cardBox = newCardBox()
+    let cardHeader = newCardHeader()
+    let title = h(4, "Round end")
+    cardHeader.appendChild(title)
+    cardBox.appendChild(cardHeader)
+    let cardBody = newCardBody()
+
+    let isOwner = game.owner === user.name
+    let nextAction = cardsInRoundDiscarded() ? "Click the button to start the new round" : "Wait for other players to discard cards"
+    let text = "The round has finished. " + (isOwner ? nextAction : "Waiting for " + game.owner + " to start the round")
+    title = h(4, text)
+    let container = newContainer()
+    container.appendChild(title)
+    if(isOwner && cardsInRoundDiscarded()) {
+        let startRoundButton = newButton("Start round", startRound)
+        container.appendChild(startRoundButton)
+    }
+
+    cardBody.appendChild(container)
+    cardBox.appendChild(cardBody)
+    cardDeck.appendChild(cardBox)
+
+    container = newContainer()
+    container.appendChild(cardDeck)
+    let section = ce("section")
+    section.appendChild(container)
+
+    gameView.appendChild(section)
+}
+
+const createGameHasFinished = () => {
+    let cardDeck = newCardDeck()
+    let cardBox = newCardBox()
+    let cardHeader = newCardHeader()
+    let title = h(4, "Game has finished")
+    cardHeader.appendChild(title)
+    cardBox.appendChild(cardHeader)
+    let cardBody = newCardBody()
+
+    let text = "The game has finished go to home to start or join a new game"
+    title = h(4, text)
+    let container = newContainer()
+    container.appendChild(title)
+    let startRoundButton = newButton("Home", startApp)
+    container.appendChild(startRoundButton)
+
+    cardBody.appendChild(container)
+    cardBox.appendChild(cardBody)
+    cardDeck.appendChild(cardBox)
+
+    container = newContainer()
+    container.appendChild(cardDeck)
+    let section = ce("section")
+    section.appendChild(container)
+
+    gameView.appendChild(section)
+}
+
+const showScore = () => {
+    let cardDeck = newCardDeck()
+    let cardBox = newCardBox()
+    let cardHeader = newCardHeader()
+    let title = h(4, "Scores")
+    cardHeader.appendChild(title)
+    cardBox.appendChild(cardHeader)
+    let cardBody = newCardBody()
+
+    if(game.finished) {
+        let winner = game.players.sort(sortBy("score"))[0]
+        title = h(3, "The winner is " + winner.user.name)
+        cardBody.appendChild(title)
+    }
+
+    game.players.forEach(player => {
+        let result = ce("p")
+        result.setAttribute("class", "lead text-muted")
+        result.innerHTML = player.user.name + ": " + player.score;
+        cardBody.appendChild(result)
+    })
+
+    cardBox.appendChild(cardBody)
+    cardDeck.appendChild(cardBox)
+    let container = newContainer()
+    container.appendChild(cardDeck)
+    let section = ce("section")
+    section.appendChild(container)
+
+    gameView.appendChild(section)
+}
+
+const currentRound = () => {
+    return game.rounds[0] // list in scala are stacks so new elements are in head
+}
+
 const roundFinished = () => {
-    return game.rounds[game.rounds.length-1].finished
+    return currentRound().finished
 }
 
 const playingRound = () => {
@@ -1097,44 +1297,73 @@ const showingCards = () => {
     return roundFinished() && (! cardsShowed() || ! cardsDiscarded())
 }
 
+const waitingForRoundToStart = () => {
+    return roundFinished() && cardsShowed() && cardsDiscarded()
+}
+
 const cardsShowed = () => {
-    return game.rounds[game.rounds.length-1].cardsShowed
+    return currentRound().cardsShowed || player.cardsShowed
 }
 
 const cardsDiscarded = () => {
-    return game.rounds[game.rounds.length-1].cardsDiscarded
+    return currentRound().cardsDiscarded  || player.cardsDiscarded
+}
+
+const discardingCards = () => {
+    return roundFinished() && (! cardsInRoundDiscarded())
+}
+
+const cardsInRoundDiscarded = () => {
+    return currentRound().cardsDiscarded
 }
 
 const createGameTableView = () => {
     createGameView()
 
-    if(! roundFinished()) {
+    if(game.finished) {
+        createGameHasFinished()
+    }
+    else if(! roundFinished()) {
         createPlayingRound()
     }
     else if(! cardsShowed() || ! cardsDiscarded()) {
         createShowingCards()
     }
     else if(cardsDiscarded()) {
-
+        createStartRound()
+    }
+    else {
+        debugger
+        throw new Error("Y ahora que hacemo papuchi")
     }
 
-    if(! isMyTurn() || showingCards()) refresh()
+    putColorInGame()
+    showScore()
+
+    if(! isMyTurn() || showingCards() || discardingCards()) {
+        refresh()
+    }
+    else {
+        console.log("isMyTurn() " + isMyTurn() )
+        console.log("showingCards() " + showingCards() )
+    }
 }
 
 const nextPlayer = () => {
-    return game.rounds[game.rounds.length -1].nextPlayer
+    return currentRound().nextPlayer
 }
 
 const isMyTurn = () => {
-    return nextPlayer().user.name === user.name
+    return ! currentRound().finished && nextPlayer().user.name === user.name
 }
 
 const startApp = () => {
-    discardRefresh = true
+    cancelRefresh = true
     clear()
     createMainView()
     createTopBar()
     createJoinGameView()
+    createCopyArea()
 }
 
 const main = () => {
@@ -1148,4 +1377,5 @@ let dummyResponse = {game: {}}
 let dummyCard = {suit: 1, number: 1}
 let dummyGame = {rounds: [], players: [], onTable: [], onDeck: [], started: false, owner: {}}
 let dummyRound = {nextPlayer: "", cardsShowed: false, finished: false, cardsDiscarded: false, scores: []}
-let dummyPlayer = {cards: []}
+let dummyPlayer = {cards: [], score: 0}
+let dummyScore = {player: "", points: 0}

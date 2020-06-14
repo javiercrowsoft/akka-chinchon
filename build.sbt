@@ -4,7 +4,7 @@ lazy val akkaVersion    = "2.6.5"
 lazy val root = (project in file(".")).
   settings(
     inThisBuild(List(
-      organization    := "com.example",
+      organization    := "ar.com.crowsoft",
       scalaVersion    := "2.13.1"
     )),
     name := "akka-chinchon",
@@ -20,3 +20,7 @@ lazy val root = (project in file(".")).
       "org.scalatest"     %% "scalatest"                % "3.0.8"         % Test
     )
   )
+
+mainClass in Compile := Some("com.crowsoft.chinchon.QuickstartApp")
+enablePlugins(JavaAppPackaging)
+enablePlugins(DockerPlugin)

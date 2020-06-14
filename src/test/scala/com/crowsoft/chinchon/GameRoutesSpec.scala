@@ -103,7 +103,7 @@ class GameRoutesSpec extends WordSpec with Matchers with ScalaFutures with Scala
         contentType should ===(ContentTypes.`application/json`)
 
         // and we know what message we're expecting back:
-        entityAs[String] should fullyMatch regex """\{"description":"Game (.*) created.","game":\{(.*)\}\}"""
+        entityAs[String] should fullyMatch regex """\{"description":"Game (.*) created.","game":\{(.*)\},"success":true\}"""
       }
     }
 
@@ -119,7 +119,7 @@ class GameRoutesSpec extends WordSpec with Matchers with ScalaFutures with Scala
         contentType should ===(ContentTypes.`application/json`)
 
         // and no entries should be in the list:
-        entityAs[String] should fullyMatch regex """\{"description":"Game (.*) deleted."\}"""
+        entityAs[String] should fullyMatch regex """\{"description":"Game (.*) deleted.","success":true\}"""
       }
     }
 
@@ -140,7 +140,7 @@ class GameRoutesSpec extends WordSpec with Matchers with ScalaFutures with Scala
         contentType should ===(ContentTypes.`application/json`)
 
         // and we know what message we're expecting back:
-        entityAs[String] should fullyMatch regex s"""\\{"description":"Game $gameName has started."\\}"""
+        entityAs[String] should fullyMatch regex s"""\\{"description":"Game $gameName has started.","success":true\\}"""
       }
     }
 
@@ -162,7 +162,7 @@ class GameRoutesSpec extends WordSpec with Matchers with ScalaFutures with Scala
         contentType should ===(ContentTypes.`application/json`)
 
         // and we know what message we're expecting back:
-        entityAs[String] should fullyMatch regex s"""\\{"description":"Round in game $gameName has started."\\}"""
+        entityAs[String] should fullyMatch regex s"""\\{"description":"Round in game $gameName has started.","success":true\\}"""
 
         getGame(gameName).foreach(g => g.maybeGame.foreach({ g=> {
           println(s"players ${g.players.size}")

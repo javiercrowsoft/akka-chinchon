@@ -66,7 +66,7 @@ class UserRoutesSpec extends WordSpec with Matchers with ScalaFutures with Scala
         contentType should ===(ContentTypes.`application/json`)
 
         // and we know what message we're expecting back:
-        entityAs[String] should ===("""{"description":"User Kapi created."}""")
+        entityAs[String] should ===("""{"description":"User Kapi created.","success":true}""")
       }
     }
     //#testing-post
@@ -82,7 +82,7 @@ class UserRoutesSpec extends WordSpec with Matchers with ScalaFutures with Scala
         contentType should ===(ContentTypes.`application/json`)
 
         // and no entries should be in the list:
-        entityAs[String] should ===("""{"description":"User Kapi deleted."}""")
+        entityAs[String] should ===("""{"description":"User Kapi deleted.","success":true}""")
       }
     }
     //#actual-test

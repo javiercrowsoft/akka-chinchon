@@ -22,14 +22,14 @@ object JsonFormats  {
 
   implicit val playerJsonFormat = jsonFormat2(Player)
   implicit val playJsonFormat = jsonFormat3(Play)
-  implicit val gamePlayerJsonFormat = jsonFormat9(GamePlayer)
+  implicit val gamePlayerJsonFormat = jsonFormat10(GamePlayer)
   implicit val scoreJsonFormat = jsonFormat2(Score)
   implicit val roundJsonFormat = jsonFormat6(Round)
   implicit val gameJsonFormat = jsonFormat8(Game)
   implicit val gamesJsonFormat = jsonFormat1(Games)
 
   implicit val newGameJsonFormat = jsonFormat1(NewGame)
-  implicit val createGameJsonFormat = jsonFormat2(CreateGameResponse)
+  implicit val createGameJsonFormat = jsonFormat3(CreateGameResponse)
 
   implicit val startGameJsonFormat = jsonFormat1(GameName)
   implicit val takeCardJsonFormat = jsonFormat3(TakeCardInfo)
@@ -39,7 +39,7 @@ object JsonFormats  {
   implicit val discardCardGameJsonFormat = jsonFormat4(DiscardedCards)
   implicit val discardCardInfoJsonFormat = jsonFormat3(DiscardCardsInfo)
 
-  implicit val userActionPerformedJsonFormat = jsonFormat1(UserRegistry.ActionPerformed)
+  implicit val userActionPerformedJsonFormat = jsonFormat2(UserRegistry.ActionPerformed)
   implicit val gameActionPerformedJsonFormat = jsonFormat2(GameRegistry.ActionPerformed)
 }
 //#json-formats
