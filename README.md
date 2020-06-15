@@ -1,3 +1,12 @@
+Chinchonazo
+
+An implementation of Chinchon Game in Akka, Akka Http, Vanilla JavaScript and Bootstrap 4.
+
+[![video](https://raw.githubusercontent.com/javiercrowsoft/akka-chinchon/master/videos/youtube01.png)](https://www.youtube.com/watch?v=SIM6cu9_dtw)
+
+[https://www.youtube.com/watch?v=SIM6cu9_dtw](https://www.youtube.com/watch?v=SIM6cu9_dtw)
+
+
 # Run
 ```
 sbt run
