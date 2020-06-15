@@ -1,4 +1,4 @@
-Chinchonazo
+# Chinchonazo
 
 An implementation of Chinchon Game in Akka, Akka Http, Vanilla JavaScript and Bootstrap 4.
 
